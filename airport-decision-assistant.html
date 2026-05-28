@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Airport Decision Assistant</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="scoring-model.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main class="app">
+    <section class="header">
+      <h1>Airport Decision Assistant</h1>
+      <p>Quick rule-based guidance for rideshare drivers deciding whether an airport run is worth it.</p>
+    </section>
+
+    <section class="form">
+      <div class="form-group">
+        <label for="airport">Airport / Pickup Area</label>
+        <select id="airport">
+          <option value="hobby">Hobby Airport</option>
+          <option value="iah">IAH Airport</option>
+          <option value="galveston">Galveston Cruise Port</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="currentZone">Current Zone</label>
+        <select id="currentZone">
+          <option value="nearHOU">Near HOU / Hobby</option>
+          <option value="nearIAH">Near IAH</option>
+          <option value="downtown">Downtown Houston</option>
+          <option value="south">South Houston</option>
+          <option value="north">North Houston</option>
+          <option value="west">West Houston</option>
+          <option value="east">East Houston</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="vehicleType">Vehicle Type</label>
+        <select id="vehicleType">
+          <option value="uberX">Uber X / Standard</option>
+          <option value="comfort">Comfort / Premier</option>
+          <option value="uberXL">Uber XL</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="airportWait">Expected Airport Wait Time</label>
+        <select id="airportWait">
+          <option value="under15">Under 15 min</option>
+          <option value="15-30">15–30 min</option>
+          <option value="30-60">30–60 min</option>
+          <option value="60+">Over 60 min</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="time">Time of Day</label>
+        <select id="time">
+          <option value="morning">Morning</option>
+          <option value="midday">Midday</option>
+          <option value="afternoon">Afternoon</option>
+          <option value="evening">Evening</option>
+          <option value="late">Late Night</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="traffic">Traffic Level</label>
+        <select id="traffic">
+          <option value="light">Light</option>
+          <option value="normal">Normal</option>
+          <option value="heavy">Heavy</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="event">Nearby Event or Cruise Activity</label>
+        <select id="event">
+          <option value="no">No</option>
+          <option value="yes">Yes</option>
+        </select>
+      </div>
+
+      <button id="recommendationButton">Get Recommendation</button>
+    </section>
+
+    <section id="result" class="result">
+      <h2 id="decision"></h2>
+      <p id="reason"></p>
+      <p id="action"></p>
+      <div id="score" class="score"></div>
+    </section>
+
+    <p class="footer-note">Prototype only. This does not use live Uber, Empower, traffic, flight, or cruise data yet.</p>
+  </main>
+</body>
+</html>

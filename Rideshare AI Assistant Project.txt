@@ -1,0 +1,58 @@
+Minimum Viable Products - Mobile Friendly Web Apps
+
+Build in modules:
+
+"Airport Decision Assistant"
+============================
+
+You now ask:
+
+What feels useful?
+What feels wrong?
+What inputs are missing?
+What recommendations seem inaccurate?
+What would real drivers want next?
+
+Your next upgrade ideas could be:
+
+Version 2
+
+Add:
+
+estimated dollars/hour
+estimated wait time
+“dead mile risk”
+fuel cost consideration
+Version 3
+
+Add:
+
+Houston event database
+Astros/Rockets/concert timing
+cruise schedules
+weather impact
+Version 4
+
+Add:
+
+AI chat assistant
+natural language questions
+“Should I leave downtown?”
+Version 5
+
+Add:
+
+crowd reports from drivers
+hotspot heatmap
+airport queue estimates
+
+
+
+Codex Recommendations
+---------------------
+Consider making the app full-width on small screens instead of a floating card. The rounded white card is fine on desktop, but on mobile it uses precious space.
+Add aria-live="polite" to the result area so screen readers announce the recommendation.
+After tapping “Get Recommendation,” scroll the result into view. This matters on smaller phones.
+Consider a sticky bottom action button if the form grows with fuel cost, mileage, weather, or queue inputs.
+Use grouped sections if more inputs are added: location, vehicle, demand, cost/risk.
+Make the result easier to scan: decision badge, estimated hourly, top 2 reasons, then expandable detail.
