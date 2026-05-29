@@ -27,7 +27,7 @@ function getRecommendation() {
   resultBox.style.display = 'block';
   decisionText.textContent = recommendation.decision;
   reasonText.innerHTML = recommendation.reasons
-    .map(reason => `• ${reason}`)
+    .map(reason => `\u2022 ${reason}`)
     .join('<br><br>');
   actionText.textContent = recommendation.action;
   scoreText.textContent = 'Estimated Hourly: ' + recommendation.hourlyEstimate;

@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Airport Decision Assistant Mobile Test</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      background: #111827;
+      color: #f9fafb;
+      padding: 0;
+    }
+
+    .app {
+      width: 100%;
+      min-height: 100vh;
+      background: #ffffff;
+      color: #111827;
+      padding: 18px;
+    }
+
+    .header {
+      margin-bottom: 22px;
+    }
+
+    .header h1 {
+      font-size: 1.55rem;
+      line-height: 1.15;
+      margin-bottom: 8px;
+    }
+
+    .header p {
+      color: #6b7280;
+      font-size: 0.95rem;
+      line-height: 1.4;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 6px;
+      font-size: 0.95rem;
+    }
+
+    select {
+      width: 100%;
+      min-height: 48px;
+      padding: 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      font-size: 1rem;
+      background: #f9fafb;
+      color: #111827;
+    }
+
+    button {
+      width: 100%;
+      min-height: 52px;
+      border: none;
+      background: #2563eb;
+      color: white;
+      padding: 15px;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+
+    button:active {
+      background: #1d4ed8;
+      transform: translateY(1px);
+    }
+
+    .result {
+      display: none;
+      margin-top: 22px;
+      padding: 16px;
+      border-radius: 12px;
+      border-left: 6px solid #9ca3af;
+      background: #f3f4f6;
+      scroll-margin-top: 16px;
+    }
+
+    .result h2 {
+      font-size: 1.55rem;
+      margin-bottom: 8px;
+    }
+
+    .result p {
+      color: #374151;
+      line-height: 1.45;
+      margin-bottom: 8px;
+    }
+
+    .score {
+      font-size: 0.95rem;
+      color: #6b7280;
+      margin-top: 10px;
+      font-weight: 700;
+    }
+
+    .go {
+      border-left-color: #16a34a;
+      background: #ecfdf5;
+    }
+
+    .go h2 {
+      color: #15803d;
+    }
+
+    .wait {
+      border-left-color: #f59e0b;
+      background: #fffbeb;
+    }
+
+    .wait h2 {
+      color: #b45309;
+    }
+
+    .avoid {
+      border-left-color: #dc2626;
+      background: #fef2f2;
+    }
+
+    .avoid h2 {
+      color: #b91c1c;
+    }
+
+    .footer-note {
+      text-align: center;
+      font-size: 0.8rem;
+      color: #6b7280;
+      margin-top: 18px;
+      line-height: 1.4;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    @media (min-width: 640px) {
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: linear-gradient(135deg, #111827, #1f2937);
+      }
+
+      .app {
+        max-width: 480px;
+        min-height: auto;
+        border-radius: 18px;
+        padding: 24px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+      }
+
+      .header {
+        text-align: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="header">
+      <h1>Airport Decision Assistant</h1>
+      <p>Quick rule-based guidance for rideshare drivers deciding whether an airport run is worth it.</p>
+    </section>
+
+    <section class="form">
+      <div class="form-group">
+        <label for="airport">Airport / Pickup Area</label>
+        <select id="airport">
+          <option value="hobby">Hobby Airport</option>
+          <option value="iah">IAH Airport</option>
+          <option value="galveston">Galveston Cruise Port</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="currentZone">Current Zone</label>
+        <select id="currentZone">
+          <option value="nearHOU">Near HOU / Hobby</option>
+          <option value="nearIAH">Near IAH</option>
+          <option value="downtown">Downtown Houston</option>
+          <option value="south">South Houston</option>
+          <option value="north">North Houston</option>
+          <option value="west">West Houston</option>
+          <option value="east">East Houston</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="vehicleType">Vehicle Type</label>
+        <select id="vehicleType">
+          <option value="uberX">Uber X / Standard</option>
+          <option value="comfort">Comfort / Premier</option>
+          <option value="uberXL">Uber XL</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="airportWait">Expected Airport Wait Time</label>
+        <select id="airportWait">
+          <option value="under15">Under 15 min</option>
+          <option value="15-30">15&ndash;30 min</option>
+          <option value="30-60">30&ndash;60 min</option>
+          <option value="60+">Over 60 min</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="time">Time of Day</label>
+        <select id="time">
+          <option value="morning">Morning</option>
+          <option value="midday">Midday</option>
+          <option value="afternoon">Afternoon</option>
+          <option value="evening">Evening</option>
+          <option value="late">Late Night</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="traffic">Traffic Level</label>
+        <select id="traffic">
+          <option value="light">Light</option>
+          <option value="normal">Normal</option>
+          <option value="heavy">Heavy</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="event">Nearby Event or Cruise Activity</label>
+        <select id="event">
+          <option value="no">No</option>
+          <option value="yes">Yes</option>
+        </select>
+      </div>
+
+      <button id="recommendationButton" type="button">Get Recommendation</button>
+    </section>
+
+    <section id="result" class="result" aria-live="polite">
+      <h2 id="decision"></h2>
+      <p id="reason"></p>
+      <p id="action"></p>
+      <div id="score" class="score"></div>
+    </section>
+
+    <p class="footer-note">Prototype only. This does not use live Uber, Empower, traffic, flight, or cruise data yet.</p>
+  </main>
+
+  <script>
+    function evaluateAirportDecision({
+      airport,
+      currentZone,
+      vehicleType,
+      airportWait,
+      time,
+      traffic,
+      event
+    }) {
+      let score = 0;
+      let reasons = [];
+      let action = '';
+
+      // Current zone / repositioning scoring
+      if (airport === 'hobby') {
+        if (currentZone === 'nearHOU') {
+          score += 3;
+          reasons.push('You are already near HOU/Hobby, so unpaid repositioning risk is low.');
+        } else if (currentZone === 'south' || currentZone === 'downtown') {
+          score += 1;
+          reasons.push('Your current zone is reasonably positioned for Hobby compared with chasing it from farther across town.');
+        } else if (currentZone === 'nearIAH' || currentZone === 'north' || currentZone === 'west') {
+          score -= 2;
+          reasons.push('Chasing Hobby from your current zone may create too much unpaid mileage and time.');
+        } else if (currentZone === 'east') {
+          score -= 1;
+          reasons.push('East Houston can work for Hobby, but traffic and unpaid repositioning still matter.');
+        }
+      }
+
+      if (airport === 'iah') {
+        if (currentZone === 'nearIAH') {
+          score += 3;
+          reasons.push('You are already near IAH, so the airport opportunity is less risky than driving across town to chase it.');
+        } else if (currentZone === 'north') {
+          score += 1;
+          reasons.push('North Houston is reasonably positioned for IAH if wait time and traffic are acceptable.');
+        } else if (currentZone === 'nearHOU' || currentZone === 'south') {
+          score -= 3;
+          reasons.push('Chasing IAH from the Hobby/South Houston side can create a lot of unpaid repositioning time.');
+        } else if (currentZone === 'west' || currentZone === 'east' || currentZone === 'downtown') {
+          score -= 1;
+          reasons.push('Your current zone is not terrible for IAH, but the repositioning cost needs to be respected.');
+        }
+      }
+
+      if (airport === 'galveston') {
+        if (currentZone === 'south' || currentZone === 'nearHOU') {
+          score += 1;
+          reasons.push('South Houston or the Hobby side is better positioned for a Galveston cruise play than the north or west side.');
+        } else if (currentZone === 'nearIAH' || currentZone === 'north' || currentZone === 'west') {
+          score -= 3;
+          reasons.push('Galveston is usually too far to chase from your current zone unless cruise activity is very strong.');
+        } else if (currentZone === 'downtown' || currentZone === 'east') {
+          score -= 1;
+          reasons.push('Galveston may be possible from your zone, but only if cruise timing is strong enough to justify the drive.');
+        }
+      }
+
+      // Vehicle type scoring
+      if (vehicleType === 'uberX') {
+        reasons.push('Uber X can do well with airport drop-offs, but airport pickup queues must be watched carefully.');
+      } else if (vehicleType === 'comfort') {
+        score += 0.75;
+        reasons.push('Comfort and Premier rides are treated as a modest earnings lift over standard Uber X.');
+      } else if (vehicleType === 'uberXL') {
+        score += 2;
+        reasons.push('Uber XL vehicles can tolerate airport waits better because of larger fares, groups, and luggage demand.');
+      }
+
+      // Expected airport wait time scoring
+      if (airportWait === 'under15') {
+        score += 3;
+        reasons.push('A short expected wait makes the opportunity much stronger.');
+      } else if (airportWait === '15-30') {
+        score += 1;
+        reasons.push('A 15\u201330 minute wait can be reasonable if the trip quality is strong.');
+      } else if (airportWait === '30-60') {
+        if (vehicleType === 'uberXL') {
+          score -= 2;
+          reasons.push('A 30\u201360 minute wait is a moderate risk for Uber XL, even though larger fares may still help offset the wait.');
+        } else if (vehicleType === 'comfort') {
+          score -= 2.5;
+          reasons.push('A 30\u201360 minute wait is a moderate penalty for Comfort or Premier because the better fare may not fully offset the idle time.');
+        } else {
+          score -= 3;
+          reasons.push('A 30\u201360 minute wait is a moderate-to-heavy penalty for Uber X or standard rides because it can drag down hourly earnings.');
+        }
+      } else if (airportWait === '60+') {
+        if (vehicleType === 'uberXL') {
+          score -= 4;
+          reasons.push('Over 60 minutes is a heavy penalty even for Uber XL because the wait can overwhelm the larger fare.');
+        } else if (vehicleType === 'comfort') {
+          score -= 5;
+          reasons.push('Over 60 minutes is a heavy penalty for Comfort or Premier unless demand factors are unusually strong.');
+        } else {
+          score -= 6;
+          reasons.push('Over 60 minutes is a severe penalty for Uber X or standard rides and can destroy hourly earnings.');
+        }
+      }
+
+      // Time of day scoring
+      if (time === 'morning') {
+        score += 2;
+        reasons.push('Morning airport demand can be stronger from early departures and business travel.');
+      } else if (time === 'afternoon') {
+        score += 1;
+        reasons.push('Afternoon can work, but traffic risk should be watched carefully.');
+      } else if (time === 'evening') {
+        score += 1;
+        reasons.push('Evening may bring arrivals, but traffic and driver saturation can reduce profit.');
+      } else if (time === 'late') {
+        score -= 1;
+        reasons.push('Late night can be hit-or-miss depending on arrivals and safety comfort.');
+      } else {
+        reasons.push('Midday is usually neutral unless there is strong flight, cruise, or event activity.');
+      }
+
+      // Traffic scoring
+      if (traffic === 'light') {
+        score += 2;
+        reasons.push('Light traffic makes the trip more efficient.');
+      } else if (traffic === 'normal') {
+        reasons.push('Normal traffic keeps the decision balanced.');
+      } else {
+        score -= 2;
+        reasons.push('Heavy traffic can destroy dollars-per-hour even if the fare looks decent.');
+      }
+
+      // Event/cruise scoring
+      if (event === 'yes') {
+        score += 3;
+        reasons.push('Nearby event or cruise activity may create stronger ride demand.');
+      } else {
+        reasons.push('No major event or cruise signal means demand may rely mostly on normal airport flow.');
+      }
+
+      // Airport-specific logic
+      if (airport === 'hobby') {
+        score += 1;
+        reasons.push('Hobby is often easier to work because pickups and getting back to busy areas are usually quicker.');
+      }
+
+      if (airport === 'iah' && traffic === 'heavy') {
+        score -= 1;
+        reasons.push('IAH plus heavy traffic can create long unpaid repositioning and slower turnarounds.');
+      }
+
+      if (airport === 'galveston') {
+        if (event === 'yes') {
+          score += 2;
+          reasons.push('Galveston cruise activity can create high-value rides when timed correctly.');
+        } else {
+          score -= 2;
+          reasons.push('Without cruise activity, Galveston can leave you stranded or force long unpaid miles.');
+        }
+      }
+
+      let decision = '';
+      let resultClass = '';
+      let hourlyEstimate = '';
+
+      if (score >= 5) {
+        decision = 'GO';
+        resultClass = 'go';
+        action = 'Best move: consider heading there now, but stay alert for changing conditions.';
+      } else if (score >= 1) {
+        decision = 'WAIT';
+        resultClass = 'wait';
+        action = 'Best move: monitor conditions first. Do not chase it unless you are already nearby.';
+      } else {
+        decision = 'AVOID';
+        resultClass = 'avoid';
+        action = 'Best move: avoid repositioning there right now. Look for a better zone with less risk.';
+      }
+
+      // Estimated hourly earnings
+      if (airportWait === '60+') {
+        if (score <= 2) {
+          hourlyEstimate = 'Under $15/hr';
+        } else if (score <= 7) {
+          hourlyEstimate = '$15\u201320/hr';
+        } else {
+          hourlyEstimate = '$20\u201330/hr';
+        }
+      } else if (score <= 0) {
+        hourlyEstimate = 'Under $15/hr';
+      } else if (score <= 4) {
+        hourlyEstimate = '$15\u201320/hr';
+      } else if (score <= 7) {
+        hourlyEstimate = '$20\u201330/hr';
+      } else if (vehicleType === 'uberXL') {
+        hourlyEstimate = '$30+/hr';
+      } else {
+        hourlyEstimate = '$20\u201330/hr';
+      }
+
+      return {
+        score,
+        reasons,
+        action,
+        decision,
+        resultClass,
+        hourlyEstimate
+      };
+    }
+
+    function getRecommendation() {
+      const airport = document.getElementById('airport').value;
+      const currentZone = document.getElementById('currentZone').value;
+      const vehicleType = document.getElementById('vehicleType').value;
+      const airportWait = document.getElementById('airportWait').value;
+      const time = document.getElementById('time').value;
+      const traffic = document.getElementById('traffic').value;
+      const event = document.getElementById('event').value;
+
+      const recommendation = evaluateAirportDecision({
+        airport,
+        currentZone,
+        vehicleType,
+        airportWait,
+        time,
+        traffic,
+        event
+      });
+
+      const resultBox = document.getElementById('result');
+      const decisionText = document.getElementById('decision');
+      const reasonText = document.getElementById('reason');
+      const actionText = document.getElementById('action');
+      const scoreText = document.getElementById('score');
+
+      resultBox.className = 'result ' + recommendation.resultClass;
+      resultBox.style.display = 'block';
+      decisionText.textContent = recommendation.decision;
+      reasonText.innerHTML = recommendation.reasons
+        .map(reason => `\u2022 ${reason}`)
+        .join('<br><br>');
+      actionText.textContent = recommendation.action;
+      scoreText.textContent = 'Estimated Hourly: ' + recommendation.hourlyEstimate;
+      resultBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    document
+      .getElementById('recommendationButton')
+      .addEventListener('click', getRecommendation);
+  </script>
+</body>
+</html>

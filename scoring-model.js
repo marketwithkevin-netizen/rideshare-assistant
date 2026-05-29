@@ -61,8 +61,8 @@ function evaluateAirportDecision({
   if (vehicleType === 'uberX') {
     reasons.push('Uber X can do well with airport drop-offs, but airport pickup queues must be watched carefully.');
   } else if (vehicleType === 'comfort') {
-    score += 1;
-    reasons.push('Comfort and Premier rides may produce slightly better payouts than standard Uber X.');
+    score += 0.75;
+    reasons.push('Comfort and Premier rides are treated as a modest earnings lift over standard Uber X.');
   } else if (vehicleType === 'uberXL') {
     score += 2;
     reasons.push('Uber XL vehicles can tolerate airport waits better because of larger fares, groups, and luggage demand.');
@@ -74,17 +74,17 @@ function evaluateAirportDecision({
     reasons.push('A short expected wait makes the opportunity much stronger.');
   } else if (airportWait === '15-30') {
     score += 1;
-    reasons.push('A 15–30 minute wait can be reasonable if the trip quality is strong.');
+    reasons.push('A 15\u201330 minute wait can be reasonable if the trip quality is strong.');
   } else if (airportWait === '30-60') {
     if (vehicleType === 'uberXL') {
       score -= 2;
-      reasons.push('A 30–60 minute wait is a moderate risk for Uber XL, even though larger fares may still help offset the wait.');
+      reasons.push('A 30\u201360 minute wait is a moderate risk for Uber XL, even though larger fares may still help offset the wait.');
     } else if (vehicleType === 'comfort') {
       score -= 2.5;
-      reasons.push('A 30–60 minute wait is a moderate penalty for Comfort or Premier because the better fare may not fully offset the idle time.');
+      reasons.push('A 30\u201360 minute wait is a moderate penalty for Comfort or Premier because the better fare may not fully offset the idle time.');
     } else {
       score -= 3;
-      reasons.push('A 30–60 minute wait is a moderate-to-heavy penalty for Uber X or standard rides because it can drag down hourly earnings.');
+      reasons.push('A 30\u201360 minute wait is a moderate-to-heavy penalty for Uber X or standard rides because it can drag down hourly earnings.');
     }
   } else if (airportWait === '60+') {
     if (vehicleType === 'uberXL') {
@@ -179,18 +179,20 @@ function evaluateAirportDecision({
     if (score <= 2) {
       hourlyEstimate = 'Under $15/hr';
     } else if (score <= 7) {
-      hourlyEstimate = '$15–20/hr';
+      hourlyEstimate = '$15\u201320/hr';
     } else {
-      hourlyEstimate = '$20–30/hr';
+      hourlyEstimate = '$20\u201330/hr';
     }
   } else if (score <= 0) {
     hourlyEstimate = 'Under $15/hr';
   } else if (score <= 4) {
-    hourlyEstimate = '$15–20/hr';
+    hourlyEstimate = '$15\u201320/hr';
   } else if (score <= 7) {
-    hourlyEstimate = '$20–30/hr';
-  } else {
+    hourlyEstimate = '$20\u201330/hr';
+  } else if (vehicleType === 'uberXL') {
     hourlyEstimate = '$30+/hr';
+  } else {
+    hourlyEstimate = '$20\u201330/hr';
   }
 
   return {
