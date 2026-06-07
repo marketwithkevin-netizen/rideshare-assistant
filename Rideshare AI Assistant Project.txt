@@ -1,5 +1,8 @@
 Minimum Viable Products - Mobile Friendly Web Apps
 
+Github Rideshare Assistant URL:
+https://marketwithkevin-netizen.github.io/rideshare-assistant/
+
 Build in modules:
 
 "Airport Decision Assistant"
@@ -108,11 +111,129 @@ Crowdsourced intelligence becomes powerful.
 
 But that’s much later.
 
-Codex Recommendations
----------------------
-Consider making the app full-width on small screens instead of a floating card. The rounded white card is fine on desktop, but on mobile it uses precious space.
-Add aria-live="polite" to the result area so screen readers announce the recommendation.
-After tapping “Get Recommendation,” scroll the result into view. This matters on smaller phones.
-Consider a sticky bottom action button if the form grows with fuel cost, mileage, weather, or queue inputs.
-Use grouped sections if more inputs are added: location, vehicle, demand, cost/risk.
-Make the result easier to scan: decision badge, estimated hourly, top 2 reasons, then expandable detail.
+===========================================================================
+The biggest risk right now is building features that nobody actually values.
+
+Priority #1: Put It In Front Of Real Drivers
+
+This is the highest-leverage step.
+
+Your goal should be:
+
+"Can a driver make better decisions with this than without it?"
+
+Before writing more code, get feedback from 5–10 drivers.
+
+Questions to ask:
+
+Would you use this before driving to the airport?
+Was the recommendation accurate?
+What recommendation did you disagree with?
+What information was missing?
+Would you pay $5/month for it?
+
+You don't need a website yet. A simple HTML page is enough.
+
+Priority #2: Add A Feedback Button
+
+This is probably the next code feature I would add.
+
+At the bottom of every recommendation:
+
+Was this recommendation accurate?
+
+👍 Yes
+👎 No
+
+If they click No:
+
+"What happened?"
+
+Examples:
+
+Queue moved faster than expected
+Traffic was worse than expected
+Got a surge ride
+Airport was dead
+Cruise traffic was stronger than expected
+
+This helps you improve the scoring system.
+
+Priority #3: Add "Actual Result" Tracking
+
+This is the feature that starts turning ADA from a calculator into a real decision tool.
+
+After receiving a recommendation:
+
+What actually happened?
+
+Earned less than expected
+Earned about as expected
+Earned more than expected
+
+or
+
+Actual hourly earnings
+
+Under $15/hr
+$15-$20/hr
+$20-$30/hr
+$30+/hr
+
+Now you're collecting real-world validation.
+
+Priority #4: Save Driver Preferences
+
+Very easy feature with high usability.
+
+Remember:
+
+Vehicle Type
+Preferred Airport
+Current Zone
+
+So the user doesn't have to enter them every time.
+
+Use browser Local Storage.
+
+No backend required.
+
+Priority #5: Make It Installable On A Phone
+
+This is where it starts feeling like a real product.
+
+Turn it into a PWA (Progressive Web App).
+
+Benefits:
+
+Home screen icon
+Opens like an app
+Works offline
+No App Store approval
+No monthly server costs
+
+This is probably the single biggest improvement to perceived value.
+
+Priority #6: Houston-Specific Knowledge
+
+This is where you have an advantage over most developers.
+
+You have:
+
+~7,000 Uber trips
+Houston airport experience
+Galveston cruise experience
+Knowledge of IAH vs HOU differences
+
+Consider adding:
+
+Special Conditions
+
+Cruise Ship Morning
+Texans Game
+Astros Game
+Rodeo
+Heavy Rain
+Holiday Weekend
+
+These affect airport decisions more than generic traffic data.

@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TripIQ</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #111315;
+      --panel: #1a1e22;
+      --panel-soft: #22272d;
+      --text: #f4f7f8;
+      --muted: #aab4bd;
+      --line: #333b44;
+      --focus: #58c7f3;
+      --green: #49d17c;
+      --green-bg: #123321;
+      --yellow: #f3c447;
+      --yellow-bg: #332a11;
+      --red: #ff6b6b;
+      --red-bg: #37191b;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 18px;
+      line-height: 1.4;
+    }
+
+    main {
+      width: min(100%, 760px);
+      margin: 0 auto;
+      padding: 28px 16px 36px;
+    }
+
+    header {
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 44px;
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    form {
+      display: grid;
+      gap: 18px;
+    }
+
+    section {
+      padding: 18px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 22px;
+      line-height: 1.2;
+    }
+
+    .grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    label {
+      display: grid;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 15px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    input {
+      width: 100%;
+      min-height: 56px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: var(--panel-soft);
+      color: var(--text);
+      font: inherit;
+      font-size: 22px;
+    }
+
+    input:focus {
+      border-color: var(--focus);
+      box-shadow: 0 0 0 3px rgba(88, 199, 243, 0.18);
+      outline: none;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    button {
+      min-height: 58px;
+      border: 0;
+      border-radius: 8px;
+      padding: 14px 18px;
+      color: #081014;
+      font: inherit;
+      font-size: 20px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .analyze {
+      background: var(--focus);
+    }
+
+    .clear {
+      background: #d3dbe2;
+    }
+
+    .helper-note {
+      margin: -4px 0 14px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .error {
+      display: none;
+      padding: 14px;
+      border: 1px solid var(--red);
+      border-radius: 8px;
+      background: var(--red-bg);
+      color: #ffd8d8;
+      font-weight: 700;
+    }
+
+    .result {
+      display: none;
+      margin-top: 18px;
+      padding: 20px;
+      border: 3px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .result.go {
+      border-color: var(--green);
+      background: var(--green-bg);
+    }
+
+    .result.maybe {
+      border-color: var(--yellow);
+      background: var(--yellow-bg);
+    }
+
+    .result.no-go {
+      border-color: var(--red);
+      background: var(--red-bg);
+    }
+
+    .decision {
+      margin: 0 0 16px;
+      font-size: 42px;
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    .metrics {
+      display: grid;
+      gap: 10px;
+      margin: 0 0 16px;
+    }
+
+    .metric {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+    }
+
+    .metric span:first-child {
+      color: var(--muted);
+    }
+
+    .metric span:last-child {
+      font-weight: 800;
+      text-align: right;
+    }
+
+    .explanation {
+      margin: 0;
+      color: var(--text);
+      font-size: 18px;
+    }
+
+    .disclaimer {
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    @media (min-width: 680px) {
+      main {
+        padding-top: 44px;
+      }
+
+      .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .ride-grid label:first-child {
+        grid-column: 1 / -1;
+      }
+
+      .actions {
+        grid-template-columns: 2fr 1fr;
+      }
+
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>TripIQ</h1>
+      <p class="subtitle">Fast ride request math for drivers.</p>
+    </header>
+
+    <form id="tripForm" novalidate>
+      <section aria-labelledby="rideInputsHeading">
+        <h2 id="rideInputsHeading">Ride Request</h2>
+        <div class="grid ride-grid">
+          <label>
+            Ride Pay ($)
+            <input id="ridePay" type="number" inputmode="decimal" min="0" step="0.01" required>
+          </label>
+          <label>
+            Pickup Time (minutes)
+            <input id="pickupTime" type="number" inputmode="decimal" min="0" step="0.1" required>
+          </label>
+          <label>
+            Pickup Distance (miles)
+            <input id="pickupDistance" type="number" inputmode="decimal" min="0" step="0.1" required>
+          </label>
+          <label>
+            Trip Time (minutes)
+            <input id="tripTime" type="number" inputmode="decimal" min="0" step="0.1" required>
+          </label>
+          <label>
+            Trip Distance (miles)
+            <input id="tripDistance" type="number" inputmode="decimal" min="0" step="0.1" required>
+          </label>
+        </div>
+      </section>
+
+      <section aria-labelledby="preferencesHeading">
+        <h2 id="preferencesHeading">Driver Preferences</h2>
+        <p class="helper-note">Hourly rate is the primary decision metric. Pay per mile is still shown for mileage efficiency, with lower thresholds because long rides often pay less per mile.</p>
+        <div class="grid">
+          <label>
+            Green / Go Min Hourly Rate
+            <input id="greenHourly" type="number" inputmode="decimal" min="0" step="0.01" value="20" required>
+          </label>
+          <label>
+            Yellow / Maybe Min Hourly Rate
+            <input id="yellowHourly" type="number" inputmode="decimal" min="0" step="0.01" value="15" required>
+          </label>
+          <label>
+            Green / Go Min Pay Per Mile
+            <input id="greenMile" type="number" inputmode="decimal" min="0" step="0.01" value="0.50" required>
+          </label>
+          <label>
+            Yellow / Maybe Min Pay Per Mile
+            <input id="yellowMile" type="number" inputmode="decimal" min="0" step="0.01" value="0.40" required>
+          </label>
+        </div>
+      </section>
+
+      <div id="error" class="error" role="alert"></div>
+
+      <div class="actions">
+        <button class="analyze" type="submit">Analyze Trip</button>
+        <button class="clear" type="button" id="clearRide">Clear</button>
+      </div>
+    </form>
+
+    <section id="result" class="result" aria-live="polite">
+      <h2 id="decision" class="decision">GO</h2>
+      <div class="metrics">
+        <div class="metric"><span>Hourly Rate</span><span id="hourlyRate">$0.00/hr</span></div>
+        <div class="metric"><span>Pay Per Mile</span><span id="payPerMile">$0.00/mile</span></div>
+        <div class="metric"><span>Total Time</span><span id="totalTime">0 minutes</span></div>
+        <div class="metric"><span>Total Miles</span><span id="totalMiles">0 miles</span></div>
+      </div>
+      <p id="explanation" class="explanation"></p>
+    </section>
+
+    <p class="disclaimer">TripIQ is an estimate tool. Actual earnings may vary due to traffic, wait time, platform fees, tips, cancellations, and other factors.</p>
+  </main>
+
+  <script>
+    const rideFields = ['ridePay', 'pickupTime', 'pickupDistance', 'tripTime', 'tripDistance'];
+    const preferenceFields = ['greenHourly', 'yellowHourly', 'greenMile', 'yellowMile'];
+    const allFields = [...rideFields, ...preferenceFields];
+    const preferenceStorageKey = 'tripiqDriverPreferences';
+
+    const form = document.getElementById('tripForm');
+    const error = document.getElementById('error');
+    const result = document.getElementById('result');
+    const clearRide = document.getElementById('clearRide');
+
+    function getNumber(id) {
+      return Number(document.getElementById(id).value);
+    }
+
+    function formatMoney(value) {
+      return `$${value.toFixed(2)}`;
+    }
+
+    function formatNumber(value) {
+      return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, '');
+    }
+
+    function showError(message) {
+      error.textContent = message;
+      error.style.display = 'block';
+      result.style.display = 'none';
+    }
+
+    function clearError() {
+      error.textContent = '';
+      error.style.display = 'none';
+    }
+
+    function validateInputs(shouldFocus = true) {
+      for (const id of allFields) {
+        const input = document.getElementById(id);
+        const value = Number(input.value);
+
+        if (input.value.trim() === '' || !Number.isFinite(value) || value <= 0) {
+          if (shouldFocus) {
+            input.focus();
+          }
+          return 'Please enter a number greater than zero for every ride field and preference threshold.';
+        }
+      }
+
+      if (getNumber('greenHourly') < getNumber('yellowHourly')) {
+        return 'Green hourly threshold should be equal to or higher than the Yellow hourly threshold.';
+      }
+
+      if (getNumber('greenMile') < getNumber('yellowMile')) {
+        return 'Green pay-per-mile threshold should be equal to or higher than the Yellow pay-per-mile threshold.';
+      }
+
+      return '';
+    }
+
+    function buildExplanation(decision, hourlyRate, payPerMile, thresholds) {
+      const hourly = `${formatMoney(hourlyRate)}/hr`;
+      const mile = `${formatMoney(payPerMile)}/mile`;
+
+      if (decision === 'GO') {
+        return `This ride is a GO because ${hourly} meets your Green hourly target of ${formatMoney(thresholds.greenHourly)}/hr and ${mile} meets your Green pay-per-mile target of ${formatMoney(thresholds.greenMile)}/mile.`;
+      }
+
+      if (decision === 'MAYBE') {
+        return `This ride is a MAYBE because ${hourly} and ${mile} meet your Yellow targets, but at least one metric does not reach your Green target.`;
+      }
+
+      const misses = [];
+      if (hourlyRate < thresholds.yellowHourly) {
+        misses.push(`the hourly rate is below your Yellow threshold of ${formatMoney(thresholds.yellowHourly)}/hr`);
+      }
+      if (payPerMile < thresholds.yellowMile) {
+        misses.push(`pay per mile is below your Yellow threshold of ${formatMoney(thresholds.yellowMile)}/mile`);
+      }
+
+      return `This ride is a NO GO because ${misses.join(' and ')}.`;
+    }
+
+    function loadSavedPreferences() {
+      try {
+        const savedPreferences = JSON.parse(localStorage.getItem(preferenceStorageKey));
+        if (!savedPreferences) {
+          return;
+        }
+
+        for (const id of preferenceFields) {
+          if (typeof savedPreferences[id] === 'string') {
+            document.getElementById(id).value = savedPreferences[id];
+          }
+        }
+      } catch (error) {
+        try {
+          localStorage.removeItem(preferenceStorageKey);
+        } catch (storageError) {
+          return;
+        }
+      }
+    }
+
+    function savePreferences() {
+      try {
+        const preferences = {};
+        for (const id of preferenceFields) {
+          preferences[id] = document.getElementById(id).value;
+        }
+
+        localStorage.setItem(preferenceStorageKey, JSON.stringify(preferences));
+      } catch (error) {
+        return;
+      }
+    }
+
+    function isResultVisible() {
+      return result.style.display === 'block';
+    }
+
+    function analyzeTrip(shouldFocusInvalid = true) {
+      const validationMessage = validateInputs(shouldFocusInvalid);
+      if (validationMessage) {
+        showError(validationMessage);
+        return false;
+      }
+
+      clearError();
+
+      const ridePay = getNumber('ridePay');
+      const totalTime = getNumber('pickupTime') + getNumber('tripTime');
+      const totalMiles = getNumber('pickupDistance') + getNumber('tripDistance');
+      const hourlyRate = ridePay / (totalTime / 60);
+      const payPerMile = ridePay / totalMiles;
+      const thresholds = {
+        greenHourly: getNumber('greenHourly'),
+        yellowHourly: getNumber('yellowHourly'),
+        greenMile: getNumber('greenMile'),
+        yellowMile: getNumber('yellowMile')
+      };
+
+      let decision = 'NO GO';
+      let className = 'no-go';
+
+      if (hourlyRate >= thresholds.greenHourly && payPerMile >= thresholds.greenMile) {
+        decision = 'GO';
+        className = 'go';
+      } else if (hourlyRate >= thresholds.yellowHourly && payPerMile >= thresholds.yellowMile) {
+        decision = 'MAYBE';
+        className = 'maybe';
+      }
+
+      result.className = `result ${className}`;
+      document.getElementById('decision').textContent = decision;
+      document.getElementById('hourlyRate').textContent = `${formatMoney(hourlyRate)}/hr`;
+      document.getElementById('payPerMile').textContent = `${formatMoney(payPerMile)}/mile`;
+      document.getElementById('totalTime').textContent = `${formatNumber(totalTime)} minutes`;
+      document.getElementById('totalMiles').textContent = `${formatNumber(totalMiles)} miles`;
+      document.getElementById('explanation').textContent = buildExplanation(decision, hourlyRate, payPerMile, thresholds);
+      result.style.display = 'block';
+      return true;
+    }
+
+    function recalculateVisibleResult() {
+      if (isResultVisible()) {
+        analyzeTrip(false);
+      }
+    }
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      analyzeTrip();
+    });
+
+    clearRide.addEventListener('click', () => {
+      for (const id of rideFields) {
+        document.getElementById(id).value = '';
+      }
+
+      clearError();
+      result.style.display = 'none';
+      document.getElementById('ridePay').focus();
+    });
+
+    for (const id of preferenceFields) {
+      document.getElementById(id).addEventListener('input', () => {
+        savePreferences();
+        recalculateVisibleResult();
+      });
+    }
+
+    loadSavedPreferences();
+  </script>
+</body>
+</html>
