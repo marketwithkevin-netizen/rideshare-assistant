@@ -103,13 +103,27 @@
       font-size: 22px;
     }
 
-    input:focus {
+    input[type="file"] {
+      min-height: auto;
+      padding: 14px;
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    input:focus,
+    summary:focus {
       border-color: var(--focus);
       box-shadow: 0 0 0 3px rgba(88, 199, 243, 0.18);
       outline: none;
     }
 
-    .actions {
+    input.review-field {
+      border-color: var(--yellow);
+      box-shadow: 0 0 0 3px rgba(243, 196, 71, 0.18);
+    }
+
+    .actions,
+    .ocr-actions {
       display: grid;
       grid-template-columns: 1fr;
       gap: 12px;
@@ -127,7 +141,13 @@
       cursor: pointer;
     }
 
-    .analyze {
+    button:disabled {
+      cursor: wait;
+      opacity: 0.62;
+    }
+
+    .analyze,
+    .read-screenshot {
       background: var(--focus);
     }
 
@@ -139,6 +159,74 @@
       margin: -4px 0 14px;
       color: var(--muted);
       font-size: 15px;
+    }
+
+    .ocr-status {
+      display: none;
+      margin: 12px 0 0;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      color: var(--text);
+      font-size: 16px;
+    }
+
+    .ocr-status.success {
+      display: block;
+      border-color: var(--green);
+      background: var(--green-bg);
+    }
+
+    .ocr-status.warning {
+      display: block;
+      border-color: var(--yellow);
+      background: var(--yellow-bg);
+    }
+
+    .ocr-status.error {
+      display: block;
+      border-color: var(--red);
+      background: var(--red-bg);
+      color: #ffd8d8;
+    }
+
+    .screenshot-preview {
+      display: none;
+      width: 100%;
+      max-height: 520px;
+      margin: 14px 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      object-fit: contain;
+    }
+
+    details {
+      margin-top: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+    }
+
+    summary {
+      min-height: 48px;
+      padding: 12px 14px;
+      color: var(--text);
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .ocr-text {
+      min-height: 110px;
+      max-height: 260px;
+      margin: 0;
+      padding: 0 14px 14px;
+      overflow: auto;
+      color: var(--muted);
+      font-family: Consolas, Monaco, monospace;
+      font-size: 14px;
+      white-space: pre-wrap;
     }
 
     .error {
@@ -233,9 +321,9 @@
       .actions {
         grid-template-columns: 2fr 1fr;
       }
-
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body>
   <main>
@@ -245,6 +333,24 @@
     </header>
 
     <form id="tripForm" novalidate>
+      <section aria-labelledby="uploadHeading">
+        <h2 id="uploadHeading">Upload Ride Screenshot</h2>
+        <p class="helper-note">Upload is optional. TripIQ can try to read a ride screenshot, fill the numbers below, and let you correct anything before analyzing.</p>
+        <label>
+          Screenshot Image
+          <input id="screenshotInput" type="file" accept="image/*">
+        </label>
+        <img id="screenshotPreview" class="screenshot-preview" alt="Uploaded ride screenshot preview">
+        <div class="ocr-actions">
+          <button class="read-screenshot" type="button" id="readScreenshot">Read Screenshot</button>
+        </div>
+        <div id="ocrStatus" class="ocr-status" role="status"></div>
+        <details>
+          <summary>OCR Text</summary>
+          <pre id="ocrText" class="ocr-text">No screenshot text read yet.</pre>
+        </details>
+      </section>
+
       <section aria-labelledby="rideInputsHeading">
         <h2 id="rideInputsHeading">Ride Request</h2>
         <div class="grid ride-grid">
@@ -326,9 +432,22 @@
     const error = document.getElementById('error');
     const result = document.getElementById('result');
     const clearRide = document.getElementById('clearRide');
+    const screenshotInput = document.getElementById('screenshotInput');
+    const screenshotPreview = document.getElementById('screenshotPreview');
+    const readScreenshot = document.getElementById('readScreenshot');
+    const ocrStatus = document.getElementById('ocrStatus');
+    const ocrText = document.getElementById('ocrText');
+
+    let previewUrl = '';
 
     function getNumber(id) {
       return Number(document.getElementById(id).value);
+    }
+
+    function setFieldValue(id, value) {
+      if (value !== null && value !== undefined && value !== '') {
+        document.getElementById(id).value = value;
+      }
     }
 
     function formatMoney(value) {
@@ -337,6 +456,15 @@
 
     function formatNumber(value) {
       return Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, '');
+    }
+
+    function normalizeNumericText(value) {
+      return String(value).replace(/,/g, '.').replace(/[^\d.]/g, '');
+    }
+
+    function toNumber(value) {
+      const number = Number(normalizeNumericText(value));
+      return Number.isFinite(number) ? number : 0;
     }
 
     function showError(message) {
@@ -348,6 +476,15 @@
     function clearError() {
       error.textContent = '';
       error.style.display = 'none';
+    }
+
+    function showOcrStatus(message, type = 'warning') {
+      ocrStatus.textContent = message;
+      ocrStatus.className = `ocr-status ${type}`;
+    }
+
+    function setRidePayReviewFlag(shouldFlag) {
+      document.getElementById('ridePay').classList.toggle('review-field', shouldFlag);
     }
 
     function validateInputs(shouldFocus = true) {
@@ -484,6 +621,275 @@
       }
     }
 
+    function loadImage(file) {
+      return new Promise((resolve, reject) => {
+        const image = new Image();
+        const objectUrl = URL.createObjectURL(file);
+
+        image.onload = () => {
+          URL.revokeObjectURL(objectUrl);
+          resolve(image);
+        };
+        image.onerror = () => {
+          URL.revokeObjectURL(objectUrl);
+          reject(new Error('Image could not be loaded.'));
+        };
+        image.src = objectUrl;
+      });
+    }
+
+    function preprocessCanvas(source, options = {}) {
+      const scale = options.scale || 2;
+      const contrast = options.contrast || 1.35;
+      const crop = options.crop || { x: 0, y: 0, width: source.width, height: source.height };
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+
+      canvas.width = Math.round(crop.width * scale);
+      canvas.height = Math.round(crop.height * scale);
+      context.drawImage(source, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
+
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+
+      // Simple browser-side OCR preprocessing: grayscale, increase contrast, and upscale.
+      for (let index = 0; index < data.length; index += 4) {
+        const gray = (data[index] * 0.299) + (data[index + 1] * 0.587) + (data[index + 2] * 0.114);
+        const adjusted = Math.max(0, Math.min(255, ((gray - 128) * contrast) + 128));
+        data[index] = adjusted;
+        data[index + 1] = adjusted;
+        data[index + 2] = adjusted;
+      }
+
+      context.putImageData(imageData, 0, 0);
+      return canvas;
+    }
+
+    function getTopRideCardText(text) {
+      const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+      const limit = Math.min(lines.length, 12);
+      return lines.slice(0, limit).join('\n');
+    }
+
+    function getFareCandidates(text) {
+      const candidates = [];
+      const patterns = [
+        /(?:\$|S)\s*([0-9]{1,3}[.,][0-9]{2})/gi,
+        /\b([0-9]{1,3}[.,][0-9]{2})\b/g,
+        /(?:\$|S)\s*([0-9]{1,3})\s+([0-9]{2})\b/gi,
+        /(?:\$|S)\s*([0-9]{1,3})\b/gi
+      ];
+
+      for (const pattern of patterns) {
+        for (const match of text.matchAll(pattern)) {
+          const rawValue = match[2] ? `${match[1]}.${match[2]}` : match[1];
+          const value = toNumber(rawValue);
+          if (value > 0 && value <= 300) {
+            candidates.push({
+              raw: match[0],
+              value,
+              normalized: value.toFixed(2).replace(/\.00$/, '')
+            });
+          }
+        }
+      }
+
+      return candidates;
+    }
+
+    function chooseFareCandidate(text) {
+      const decimalCandidates = getFareCandidates(text).filter(candidate => candidate.raw.includes('.') || candidate.raw.includes(','));
+      const fareLikeDecimals = decimalCandidates.filter(candidate => candidate.value >= 2 && candidate.value <= 300);
+      const candidates = fareLikeDecimals.length ? fareLikeDecimals : getFareCandidates(text);
+
+      if (!candidates.length) {
+        return '';
+      }
+
+      // Fare OCR improvement: prefer fare-like decimal values, then choose the largest plausible fare.
+      const best = candidates.reduce((largest, current) => current.value > largest.value ? current : largest);
+      return best.normalized;
+    }
+
+    function getBestFareGuess(fullText, fareAreaText = '') {
+      const sources = [
+        fareAreaText,
+        getTopRideCardText(fullText),
+        fullText
+      ].filter(Boolean);
+
+      for (const source of sources) {
+        const fare = chooseFareCandidate(source);
+        if (fare) {
+          return fare;
+        }
+      }
+
+      return '';
+    }
+
+    function extractRideDetails(text, fareAreaText = '') {
+      const minuteMatches = [...text.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:min|mins|minute|minutes)\b/gi)];
+      const mileMatches = [...text.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:mi|mile|miles)\b/gi)];
+
+      const details = {
+        ridePay: getBestFareGuess(text, fareAreaText),
+        pickupTime: minuteMatches[0] ? normalizeNumericText(minuteMatches[0][1]) : '',
+        tripTime: minuteMatches[1] ? normalizeNumericText(minuteMatches[1][1]) : '',
+        pickupDistance: mileMatches[0] ? normalizeNumericText(mileMatches[0][1]) : '',
+        tripDistance: mileMatches[1] ? normalizeNumericText(mileMatches[1][1]) : ''
+      };
+
+      return details;
+    }
+
+    function applyExtractedDetails(details) {
+      setFieldValue('ridePay', details.ridePay);
+      setFieldValue('pickupTime', details.pickupTime);
+      setFieldValue('pickupDistance', details.pickupDistance);
+      setFieldValue('tripTime', details.tripTime);
+      setFieldValue('tripDistance', details.tripDistance);
+    }
+
+    function describeMissingDetails(details) {
+      const labels = {
+        ridePay: 'Ride Pay',
+        pickupTime: 'Pickup Time',
+        pickupDistance: 'Pickup Distance',
+        tripTime: 'Trip Time',
+        tripDistance: 'Trip Distance'
+      };
+
+      return Object.entries(labels)
+        .filter(([id]) => !details[id])
+        .map(([, label]) => label);
+    }
+
+    function shouldFlagFareForReview(details) {
+      const ridePay = toNumber(details.ridePay);
+      const pickupTime = toNumber(details.pickupTime);
+      const tripTime = toNumber(details.tripTime);
+      const pickupDistance = toNumber(details.pickupDistance);
+      const tripDistance = toNumber(details.tripDistance);
+      const hasNormalTripValues = pickupTime > 0 && tripTime > 0 && pickupDistance > 0 && tripDistance > 0;
+
+      return ridePay > 0 && ridePay < 2 && hasNormalTripValues;
+    }
+
+    async function runOcrOnCanvas(canvas, label) {
+      const result = await Tesseract.recognize(canvas, 'eng', {
+        logger(progress) {
+          if (progress.status === 'recognizing text' && progress.progress) {
+            const percent = Math.round(progress.progress * 100);
+            showOcrStatus(`${label}... ${percent}%`, 'warning');
+          }
+        }
+      });
+
+      return result.data.text.trim();
+    }
+
+    async function readScreenshotText() {
+      const file = screenshotInput.files[0];
+
+      if (!file) {
+        setRidePayReviewFlag(false);
+        showOcrStatus('Choose a screenshot first, then tap Read Screenshot.', 'warning');
+        return;
+      }
+
+      if (!window.Tesseract) {
+        setRidePayReviewFlag(false);
+        showOcrStatus('OCR could not load. You can still enter the ride details manually below.', 'error');
+        return;
+      }
+
+      readScreenshot.disabled = true;
+      readScreenshot.textContent = 'Reading...';
+      showOcrStatus('Preprocessing screenshot for OCR.', 'warning');
+
+      try {
+        const image = await loadImage(file);
+        const fullCanvas = preprocessCanvas(image, { scale: 2, contrast: 1.45 });
+        const fareCanvas = preprocessCanvas(image, {
+          scale: 3,
+          contrast: 1.6,
+          crop: {
+            x: 0,
+            y: 0,
+            width: image.width,
+            height: Math.max(1, image.height * 0.36)
+          }
+        });
+
+        // Fare-area OCR gives the large upper-card fare a cleaner second chance.
+        const fareAreaText = await runOcrOnCanvas(fareCanvas, 'Reading fare area');
+        const text = await runOcrOnCanvas(fullCanvas, 'Reading full screenshot');
+        const details = extractRideDetails(text, fareAreaText);
+        const missing = describeMissingDetails(details);
+        const needsFareReview = shouldFlagFareForReview(details);
+
+        ocrText.textContent = [
+          '--- Fare Area OCR ---',
+          fareAreaText || 'No fare-area text detected.',
+          '',
+          '--- Full Screenshot OCR ---',
+          text || 'OCR did not detect readable text.'
+        ].join('\n');
+        applyExtractedDetails(details);
+        setRidePayReviewFlag(needsFareReview);
+
+        if (missing.length || needsFareReview) {
+          const reviewNotes = [];
+          if (missing.length) {
+            reviewNotes.push(`TripIQ could not confidently fill: ${missing.join(', ')}`);
+          }
+          if (needsFareReview) {
+            reviewNotes.push('Ride Pay looks unusually low for a normal trip, so check the fare field');
+          }
+
+          showOcrStatus(`Review the numbers below, correct anything needed, then analyze the trip. ${reviewNotes.join('. ')}.`, 'warning');
+        } else {
+          showOcrStatus('Review the numbers below, correct anything needed, then analyze the trip.', 'success');
+        }
+
+        recalculateVisibleResult();
+      } catch (error) {
+        ocrText.textContent = 'OCR failed before text could be read.';
+        setRidePayReviewFlag(false);
+        showOcrStatus('OCR failed. You can still enter the ride details manually below.', 'error');
+      } finally {
+        readScreenshot.disabled = false;
+        readScreenshot.textContent = 'Read Screenshot';
+      }
+    }
+
+    screenshotInput.addEventListener('change', () => {
+      const file = screenshotInput.files[0];
+
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+        previewUrl = '';
+      }
+
+      if (!file) {
+        screenshotPreview.removeAttribute('src');
+        screenshotPreview.style.display = 'none';
+        setRidePayReviewFlag(false);
+        showOcrStatus('Choose a screenshot first, then tap Read Screenshot.', 'warning');
+        return;
+      }
+
+      previewUrl = URL.createObjectURL(file);
+      screenshotPreview.src = previewUrl;
+      screenshotPreview.style.display = 'block';
+      ocrText.textContent = 'No screenshot text read yet.';
+      setRidePayReviewFlag(false);
+      showOcrStatus('Screenshot loaded. Tap Read Screenshot to auto-fill the ride details.', 'warning');
+    });
+
+    readScreenshot.addEventListener('click', readScreenshotText);
+
     form.addEventListener('submit', (event) => {
       event.preventDefault();
       analyzeTrip();
@@ -496,6 +902,7 @@
 
       clearError();
       result.style.display = 'none';
+      setRidePayReviewFlag(false);
       document.getElementById('ridePay').focus();
     });
 
@@ -505,6 +912,10 @@
         recalculateVisibleResult();
       });
     }
+
+    document.getElementById('ridePay').addEventListener('input', () => {
+      setRidePayReviewFlag(false);
+    });
 
     loadSavedPreferences();
   </script>
