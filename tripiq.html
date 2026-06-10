@@ -728,14 +728,60 @@
       return '';
     }
 
+    function formatExtractedMinutes(totalMinutes) {
+      return Number.isInteger(totalMinutes) ? String(totalMinutes) : totalMinutes.toFixed(1).replace(/\.0$/, '');
+    }
+
+    function extractTimeValues(text) {
+      const matches = [];
+      let maskedText = text;
+      const hourPattern = /(\d+(?:[.,]\d+)?)\s*(?:hours|hour|hrs|hr)\s*(?:(\d+(?:[.,]\d+)?)\s*(?:minutes|minute|mins|min))?/gi;
+      const minutePattern = /(\d+(?:[.,]\d+)?)\s*(?:minutes|minute|mins|min)/gi;
+
+      // OCR time parser: first capture Uber-style combined phrases like
+      // "2 hr 52 min", "2 hr52min", and "2hr52min" as one span, then mask
+      // that span so "52 min" is not extracted again as standalone minutes.
+      for (const match of text.matchAll(hourPattern)) {
+        const hours = toNumber(match[1]);
+        const minutes = match[2] ? toNumber(match[2]) : 0;
+        const totalMinutes = (hours * 60) + minutes;
+
+        if (totalMinutes > 0) {
+          matches.push({
+            index: match.index,
+            phrase: match[0],
+            value: formatExtractedMinutes(totalMinutes)
+          });
+        }
+
+        const mask = ' '.repeat(match[0].length);
+        maskedText = maskedText.slice(0, match.index) + mask + maskedText.slice(match.index + match[0].length);
+      }
+
+      for (const match of maskedText.matchAll(minutePattern)) {
+        const totalMinutes = toNumber(match[1]);
+
+        if (totalMinutes > 0) {
+          matches.push({
+            index: match.index,
+            phrase: match[0],
+            value: formatExtractedMinutes(totalMinutes)
+          });
+        }
+      }
+
+      return matches
+        .sort((first, second) => first.index - second.index);
+    }
+
     function extractRideDetails(text, fareAreaText = '') {
-      const minuteMatches = [...text.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:min|mins|minute|minutes)\b/gi)];
+      const timeValues = extractTimeValues(text).map(match => match.value);
       const mileMatches = [...text.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:mi|mile|miles)\b/gi)];
 
       const details = {
         ridePay: getBestFareGuess(text, fareAreaText),
-        pickupTime: minuteMatches[0] ? normalizeNumericText(minuteMatches[0][1]) : '',
-        tripTime: minuteMatches[1] ? normalizeNumericText(minuteMatches[1][1]) : '',
+        pickupTime: timeValues[0] || '',
+        tripTime: timeValues[1] || '',
         pickupDistance: mileMatches[0] ? normalizeNumericText(mileMatches[0][1]) : '',
         tripDistance: mileMatches[1] ? normalizeNumericText(mileMatches[1][1]) : ''
       };
@@ -826,10 +872,16 @@
         const fareAreaText = await runOcrOnCanvas(fareCanvas, 'Reading fare area');
         const text = await runOcrOnCanvas(fullCanvas, 'Reading full screenshot');
         const details = extractRideDetails(text, fareAreaText);
+        const extractedTimeMatches = extractTimeValues(text);
+        const extractedTimePhrases = extractedTimeMatches.map(match => match.phrase.trim());
+        const extractedTimeValues = extractedTimeMatches.map(match => match.value);
         const missing = describeMissingDetails(details);
         const needsFareReview = shouldFlagFareForReview(details);
 
         ocrText.textContent = [
+          `Extracted time phrases: [${extractedTimePhrases.join(', ')}]`,
+          `Extracted time values: [${extractedTimeValues.join(', ')}]`,
+          '',
           '--- Fare Area OCR ---',
           fareAreaText || 'No fare-area text detected.',
           '',
