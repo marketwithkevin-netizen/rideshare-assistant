@@ -641,6 +641,7 @@
     function preprocessCanvas(source, options = {}) {
       const scale = options.scale || 2;
       const contrast = options.contrast || 1.35;
+      const threshold = options.threshold || 0;
       const crop = options.crop || { x: 0, y: 0, width: source.width, height: source.height };
       const canvas = document.createElement('canvas');
       const context = canvas.getContext('2d');
@@ -655,7 +656,8 @@
       // Simple browser-side OCR preprocessing: grayscale, increase contrast, and upscale.
       for (let index = 0; index < data.length; index += 4) {
         const gray = (data[index] * 0.299) + (data[index + 1] * 0.587) + (data[index + 2] * 0.114);
-        const adjusted = Math.max(0, Math.min(255, ((gray - 128) * contrast) + 128));
+        const contrasted = Math.max(0, Math.min(255, ((gray - 128) * contrast) + 128));
+        const adjusted = threshold ? (contrasted >= threshold ? 255 : 0) : contrasted;
         data[index] = adjusted;
         data[index + 1] = adjusted;
         data[index + 2] = adjusted;
@@ -665,67 +667,232 @@
       return canvas;
     }
 
+    function formatCropDebug(crop) {
+      return `x=${Math.round(crop.x)}, y=${Math.round(crop.y)}, width=${Math.round(crop.width)}, height=${Math.round(crop.height)}`;
+    }
+
+    function getImageBrightness(context, x, y) {
+      const pixel = context.getImageData(x, y, 1, 1).data;
+      return (pixel[0] * 0.299) + (pixel[1] * 0.587) + (pixel[2] * 0.114);
+    }
+
+    function detectRideCardCrop(image) {
+      const scanCanvas = document.createElement('canvas');
+      const scanContext = scanCanvas.getContext('2d');
+      const sampleWidth = 80;
+      const sampleHeight = Math.max(120, Math.round(image.height / image.width * sampleWidth));
+      const centerX = Math.round(sampleWidth / 2);
+      let cardStartY = -1;
+
+      scanCanvas.width = sampleWidth;
+      scanCanvas.height = sampleHeight;
+      scanContext.drawImage(image, 0, 0, sampleWidth, sampleHeight);
+
+      for (let y = Math.round(sampleHeight * 0.35); y < sampleHeight - 8; y++) {
+        const centerBrightness = getImageBrightness(scanContext, centerX, y);
+        const leftBrightness = getImageBrightness(scanContext, Math.round(sampleWidth * 0.08), y);
+        const rightBrightness = getImageBrightness(scanContext, Math.round(sampleWidth * 0.92), y);
+        const cardContrast = Math.abs(centerBrightness - ((leftBrightness + rightBrightness) / 2));
+
+        if (cardContrast > 35) {
+          cardStartY = Math.max(0, y - 5);
+          break;
+        }
+      }
+
+      const fallbackY = image.height * 0.52;
+      const y = cardStartY >= 0 ? (cardStartY / sampleHeight) * image.height : fallbackY;
+
+      return {
+        x: image.width * 0.04,
+        y,
+        width: image.width * 0.92,
+        height: Math.min(image.height - y, image.height * 0.42),
+        source: cardStartY >= 0 ? 'detected ride card' : 'lower-card fallback'
+      };
+    }
+
+    function getMainFareCrop(cardCrop) {
+      return {
+        x: cardCrop.x,
+        y: cardCrop.y,
+        width: cardCrop.width,
+        height: Math.max(1, cardCrop.height * 0.36),
+        source: `${cardCrop.source} fare band`
+      };
+    }
+
+    function getFareOnlyCrop(cardCrop) {
+      return {
+        x: cardCrop.x + (cardCrop.width * 0.04),
+        y: cardCrop.y + (cardCrop.height * 0.14),
+        width: cardCrop.width * 0.48,
+        height: Math.max(1, cardCrop.height * 0.18),
+        source: `${cardCrop.source} fare-only band`
+      };
+    }
+
     function getTopRideCardText(text) {
       const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
       const limit = Math.min(lines.length, 12);
       return lines.slice(0, limit).join('\n');
     }
 
-    function getFareCandidates(text) {
+    function getFareCandidates(text, options = {}) {
       const candidates = [];
+      const lines = text.split(/\r?\n/);
+      let runningIndex = 0;
+      const allowStandaloneWholeNumbers = options.allowStandaloneWholeNumbers || false;
+      const estimatePattern = /(\/\s*active\s*hr|active\s*hr|\/\s*hr|per\s*hr|hr\s*\(est|\(est\))/i;
+      const helperAmountPattern = /(included\s*for\s*priority\s*pickup|priority\s*pickup|included|bonus|extra|perk)/i;
+      const phoneClockPattern = /\b\d{1,2}[:.]\d{2}\b/;
       const patterns = [
-        /(?:\$|S)\s*([0-9]{1,3}[.,][0-9]{2})/gi,
-        /\b([0-9]{1,3}[.,][0-9]{2})\b/g,
-        /(?:\$|S)\s*([0-9]{1,3})\s+([0-9]{2})\b/gi,
-        /(?:\$|S)\s*([0-9]{1,3})\b/gi
+        { regex: /(?:\$|S)\s*([0-9]{1,3}[.,][0-9]{2})/gi, requiresSymbol: true },
+        { regex: /(?:\$|S)\s*([0-9]{1,3})\s+([0-9]{2})\b/gi, requiresSymbol: true },
+        { regex: /\b([0-9]{1,3}[.,][0-9]{2})\b/g, requiresSymbol: false },
+        { regex: /(?:\$|S)\s*([0-9]{1,3})\b/gi, requiresSymbol: true, integerOnly: true },
+        { regex: /\b([0-9]{1,3})\b/g, requiresSymbol: false, integerOnly: true, fareCropOnly: true }
       ];
 
-      for (const pattern of patterns) {
-        for (const match of text.matchAll(pattern)) {
-          const rawValue = match[2] ? `${match[1]}.${match[2]}` : match[1];
-          const value = toNumber(rawValue);
-          if (value > 0 && value <= 300) {
-            candidates.push({
-              raw: match[0],
-              value,
-              normalized: value.toFixed(2).replace(/\.00$/, '')
-            });
+      for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+        const line = lines[lineIndex];
+        let ignoredReason = estimatePattern.test(line) ? 'same line as hourly estimate text' : '';
+        const isStatusBarLine = lineIndex <= 2;
+        const looksLikePhoneClock = phoneClockPattern.test(line);
+        const helperMatch = line.match(helperAmountPattern);
+        const helperTextIndex = helperMatch ? helperMatch.index : -1;
+
+        for (const pattern of patterns) {
+          if (pattern.fareCropOnly && !allowStandaloneWholeNumbers) {
+            continue;
+          }
+
+          for (const match of line.matchAll(pattern.regex)) {
+            if (!pattern.requiresSymbol && /[\$S]\s*$/i.test(line.slice(0, match.index))) {
+              continue;
+            }
+            if (pattern.integerOnly && /[.,]/.test(line.charAt(match.index + match[0].length))) {
+              continue;
+            }
+            if (pattern.integerOnly && /[.,]/.test(line.charAt(match.index - 1))) {
+              continue;
+            }
+
+            const rawValue = match[2] ? `${match[1]}.${match[2]}` : match[1];
+            const value = toNumber(rawValue);
+            if (value > 0 && value <= 300) {
+              const candidateLooksLikeClock = looksLikePhoneClock && value < 2;
+              const plusBeforeCandidate = line.slice(Math.max(0, match.index - 2), match.index).includes('+');
+              const helperCandidate = helperTextIndex >= 0 && (match.index >= helperTextIndex || plusBeforeCandidate);
+              const helperIgnoredReason = helperCandidate ? 'same line as helper or bonus amount text' : '';
+              const candidateIgnoredReason = ignoredReason || helperIgnoredReason || (isStatusBarLine && candidateLooksLikeClock ? 'top status-bar phone clock text' : '');
+
+              candidates.push({
+                raw: match[0],
+                value,
+                normalized: value.toFixed(2).replace(/\.00$/, ''),
+                line: line.trim(),
+                index: runningIndex + match.index,
+                ignoredReason: candidateIgnoredReason,
+                requiresSymbol: pattern.requiresSymbol
+              });
+            }
           }
         }
+
+        runningIndex += line.length + 1;
       }
 
       return candidates;
     }
 
     function chooseFareCandidate(text) {
-      const decimalCandidates = getFareCandidates(text).filter(candidate => candidate.raw.includes('.') || candidate.raw.includes(','));
+      const candidates = getFareCandidates(text);
+      const validCandidates = candidates.filter(candidate => !candidate.ignoredReason);
+      const decimalCandidates = validCandidates.filter(candidate => candidate.raw.includes('.') || candidate.raw.includes(','));
       const fareLikeDecimals = decimalCandidates.filter(candidate => candidate.value >= 2 && candidate.value <= 300);
-      const candidates = fareLikeDecimals.length ? fareLikeDecimals : getFareCandidates(text);
+      const fareLikeSymbolDecimals = fareLikeDecimals.filter(candidate => candidate.requiresSymbol);
+      const symbolCandidates = validCandidates.filter(candidate => candidate.requiresSymbol && candidate.value >= 2 && candidate.value <= 300);
+      const selectionPool = fareLikeSymbolDecimals.length ? fareLikeSymbolDecimals : (symbolCandidates.length ? symbolCandidates : (fareLikeDecimals.length ? fareLikeDecimals : validCandidates));
 
-      if (!candidates.length) {
+      if (!selectionPool.length) {
         return '';
       }
 
-      // Fare OCR improvement: prefer fare-like decimal values, then choose the largest plausible fare.
-      const best = candidates.reduce((largest, current) => current.value > largest.value ? current : largest);
-      return best.normalized;
+      // Fare OCR improvement: ignore hourly-estimate lines, then use the first
+      // valid standalone fare near the top instead of the largest dollar value.
+      return selectionPool
+        .sort((first, second) => first.index - second.index)[0]
+        .normalized;
     }
 
-    function getBestFareGuess(fullText, fareAreaText = '') {
+    function chooseFareCandidateWithDebug(text, sourceName, options = {}) {
+      const candidates = getFareCandidates(text, options).map(candidate => ({
+        ...candidate,
+        source: sourceName,
+        selected: false
+      }));
+      const validCandidates = candidates.filter(candidate => !candidate.ignoredReason);
+      const decimalCandidates = validCandidates.filter(candidate => candidate.raw.includes('.') || candidate.raw.includes(','));
+      const fareLikeDecimals = decimalCandidates.filter(candidate => candidate.value >= 2 && candidate.value <= 300);
+      const fareLikeSymbolDecimals = fareLikeDecimals.filter(candidate => candidate.requiresSymbol);
+      const symbolCandidates = validCandidates.filter(candidate => candidate.requiresSymbol && candidate.value >= 2 && candidate.value <= 300);
+      const selectionPool = fareLikeSymbolDecimals.length ? fareLikeSymbolDecimals : (symbolCandidates.length ? symbolCandidates : (fareLikeDecimals.length ? fareLikeDecimals : validCandidates));
+
+      if (!selectionPool.length) {
+        return { fare: '', selected: null, candidates };
+      }
+
+      const selected = options.preferLargest
+        ? selectionPool.sort((first, second) => second.value - first.value)[0]
+        : selectionPool.sort((first, second) => first.index - second.index)[0];
+      selected.selected = true;
+      return { fare: selected.normalized, selected, candidates };
+    }
+
+    function getFareExtractionDebug(fullText, fareAreaText = '', mainFareText = '', fareOnlyText = '') {
       const sources = [
-        fareAreaText,
-        getTopRideCardText(fullText),
-        fullText
+        { name: 'fare-only crop', text: fareOnlyText, allowStandaloneWholeNumbers: true, preferLargest: true },
+        { name: 'main fare crop', text: mainFareText, allowStandaloneWholeNumbers: true, preferLargest: true },
+        { name: 'fare area', text: fareAreaText },
+        { name: 'top card', text: getTopRideCardText(fullText) },
+        { name: 'full screenshot', text: fullText }
       ].filter(Boolean);
+      const allCandidates = [];
+      let fare = '';
+      let selected = null;
 
       for (const source of sources) {
-        const fare = chooseFareCandidate(source);
-        if (fare) {
-          return fare;
+        if (!source.text) {
+          continue;
+        }
+
+        const result = chooseFareCandidateWithDebug(source.text, source.name, {
+          allowStandaloneWholeNumbers: Boolean(source.allowStandaloneWholeNumbers),
+          preferLargest: Boolean(source.preferLargest)
+        });
+        allCandidates.push(...result.candidates);
+
+        if (!fare && result.fare) {
+          fare = result.fare;
+          selected = result.selected;
         }
       }
 
-      return '';
+      return {
+        fare,
+        selected,
+        candidates: allCandidates
+      };
+    }
+
+    function getBestFareGuess(fullText, fareAreaText = '', mainFareText = '', fareOnlyText = '') {
+      return getFareExtractionDebug(fullText, fareAreaText, mainFareText, fareOnlyText).fare;
+    }
+
+    function formatFareCandidateDebug(candidate) {
+      const status = candidate.selected ? 'selected' : (candidate.ignoredReason ? `ignored: ${candidate.ignoredReason}` : 'valid');
+      return `${candidate.raw.trim()} -> ${candidate.normalized} [${status}; ${candidate.source}; line: ${candidate.line || '(blank)'}]`;
     }
 
     function formatExtractedMinutes(totalMinutes) {
@@ -774,16 +941,60 @@
         .sort((first, second) => first.index - second.index);
     }
 
+    function isIgnoredTimeLine(line) {
+      return /(avg\.\s*wait\s*time|wait\s*time|pickup\s*wait|wait\s*at\s*pickup)/i.test(line);
+    }
+
+    function extractRideTimeDistancePairs(text) {
+      const pairs = [];
+      const ignoredTimeLines = [];
+      const lines = text.split(/\r?\n/);
+      let runningIndex = 0;
+      const milePattern = /(\d+(?:[.,]\d+)?)\s*(?:mi|mile|miles)\b/i;
+
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        const timeMatches = extractTimeValues(line);
+        const mileMatch = line.match(milePattern);
+
+        if (timeMatches.length && isIgnoredTimeLine(line)) {
+          ignoredTimeLines.push(trimmedLine);
+        } else if (timeMatches.length && mileMatch) {
+          pairs.push({
+            index: runningIndex + line.indexOf(timeMatches[0].phrase),
+            line: trimmedLine,
+            time: timeMatches[0].value,
+            distance: normalizeNumericText(mileMatch[1])
+          });
+        }
+
+        runningIndex += line.length + 1;
+      }
+
+      return {
+        pairs: pairs.sort((first, second) => first.index - second.index),
+        ignoredTimeLines
+      };
+    }
+
+    function extractNonIgnoredTimeValues(text) {
+      return text
+        .split(/\r?\n/)
+        .filter(line => !isIgnoredTimeLine(line))
+        .flatMap(line => extractTimeValues(line).map(match => match.value));
+    }
+
     function extractRideDetails(text, fareAreaText = '') {
-      const timeValues = extractTimeValues(text).map(match => match.value);
+      const ridePairs = extractRideTimeDistancePairs(text).pairs;
+      const timeValues = extractNonIgnoredTimeValues(text);
       const mileMatches = [...text.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:mi|mile|miles)\b/gi)];
 
       const details = {
         ridePay: getBestFareGuess(text, fareAreaText),
-        pickupTime: timeValues[0] || '',
-        tripTime: timeValues[1] || '',
-        pickupDistance: mileMatches[0] ? normalizeNumericText(mileMatches[0][1]) : '',
-        tripDistance: mileMatches[1] ? normalizeNumericText(mileMatches[1][1]) : ''
+        pickupTime: ridePairs[0] ? ridePairs[0].time : (timeValues[0] || ''),
+        tripTime: ridePairs[1] ? ridePairs[1].time : (timeValues[1] || ''),
+        pickupDistance: ridePairs[0] ? ridePairs[0].distance : (mileMatches[0] ? normalizeNumericText(mileMatches[0][1]) : ''),
+        tripDistance: ridePairs[1] ? ridePairs[1].distance : (mileMatches[1] ? normalizeNumericText(mileMatches[1][1]) : '')
       };
 
       return details;
@@ -822,8 +1033,9 @@
       return ridePay > 0 && ridePay < 2 && hasNormalTripValues;
     }
 
-    async function runOcrOnCanvas(canvas, label) {
+    async function runOcrOnCanvas(canvas, label, options = {}) {
       const result = await Tesseract.recognize(canvas, 'eng', {
+        ...options,
         logger(progress) {
           if (progress.status === 'recognizing text' && progress.progress) {
             const percent = Math.round(progress.progress * 100);
@@ -856,31 +1068,72 @@
 
       try {
         const image = await loadImage(file);
+        const cardCrop = detectRideCardCrop(image);
+        const mainFareCrop = getMainFareCrop(cardCrop);
+        const fareOnlyCrop = getFareOnlyCrop(cardCrop);
         const fullCanvas = preprocessCanvas(image, { scale: 2, contrast: 1.45 });
         const fareCanvas = preprocessCanvas(image, {
           scale: 3,
           contrast: 1.6,
-          crop: {
-            x: 0,
-            y: 0,
-            width: image.width,
-            height: Math.max(1, image.height * 0.36)
-          }
+          crop: cardCrop
+        });
+        const mainFareCanvas = preprocessCanvas(image, {
+          scale: 4,
+          contrast: 1.9,
+          threshold: 150,
+          crop: mainFareCrop
+        });
+        const fareOnlyCanvas = preprocessCanvas(image, {
+          scale: 5,
+          contrast: 2.2,
+          threshold: 135,
+          crop: fareOnlyCrop
         });
 
-        // Fare-area OCR gives the large upper-card fare a cleaner second chance.
+        // Fare-area OCR targets the ride request card, not the map/status bar.
+        const fareOnlyText = await runOcrOnCanvas(fareOnlyCanvas, 'Reading fare-only area', {
+          tessedit_char_whitelist: '$S0123456789.,',
+          tessedit_pageseg_mode: '7'
+        });
+        const mainFareText = await runOcrOnCanvas(mainFareCanvas, 'Reading main fare area');
         const fareAreaText = await runOcrOnCanvas(fareCanvas, 'Reading fare area');
         const text = await runOcrOnCanvas(fullCanvas, 'Reading full screenshot');
+        const fareDebug = getFareExtractionDebug(text, fareAreaText, mainFareText, fareOnlyText);
         const details = extractRideDetails(text, fareAreaText);
+        details.ridePay = fareDebug.fare;
+        const ridePairDebug = extractRideTimeDistancePairs(text);
         const extractedTimeMatches = extractTimeValues(text);
         const extractedTimePhrases = extractedTimeMatches.map(match => match.phrase.trim());
         const extractedTimeValues = extractedTimeMatches.map(match => match.value);
+        const ignoredTimeLines = ridePairDebug.ignoredTimeLines.length ? ridePairDebug.ignoredTimeLines : ['none'];
+        const selectedPickupPair = ridePairDebug.pairs[0] ? `${ridePairDebug.pairs[0].time} min / ${ridePairDebug.pairs[0].distance} mi from "${ridePairDebug.pairs[0].line}"` : 'none';
+        const selectedTripPair = ridePairDebug.pairs[1] ? `${ridePairDebug.pairs[1].time} min / ${ridePairDebug.pairs[1].distance} mi from "${ridePairDebug.pairs[1].line}"` : 'none';
+        const fareCandidateLines = fareDebug.candidates.length
+          ? fareDebug.candidates.map(formatFareCandidateDebug)
+          : ['No dollar candidates found.'];
         const missing = describeMissingDetails(details);
         const needsFareReview = shouldFlagFareForReview(details);
 
         ocrText.textContent = [
           `Extracted time phrases: [${extractedTimePhrases.join(', ')}]`,
           `Extracted time values: [${extractedTimeValues.join(', ')}]`,
+          `Ignored time lines: [${ignoredTimeLines.join(' | ')}]`,
+          `Selected pickup time/distance: ${selectedPickupPair}`,
+          `Selected trip time/distance: ${selectedTripPair}`,
+          `Selected fare candidate: ${fareDebug.selected ? formatFareCandidateDebug(fareDebug.selected) : 'none'}`,
+          'All dollar candidates:',
+          ...fareCandidateLines,
+          '',
+          `Detected ride card crop (${cardCrop.source}): ${formatCropDebug(cardCrop)}`,
+          `Main fare crop (${mainFareCrop.source}): ${formatCropDebug(mainFareCrop)}`,
+          `Fare-only crop (${fareOnlyCrop.source}): ${formatCropDebug(fareOnlyCrop)}`,
+          `Selected fare-only candidate: ${fareDebug.selected && fareDebug.selected.source === 'fare-only crop' ? formatFareCandidateDebug(fareDebug.selected) : 'none'}`,
+          '',
+          '--- Fare-Only Crop OCR ---',
+          fareOnlyText || 'No fare-only crop text detected.',
+          '',
+          '--- Main Fare Crop OCR ---',
+          mainFareText || 'No main fare crop text detected.',
           '',
           '--- Fare Area OCR ---',
           fareAreaText || 'No fare-area text detected.',
