@@ -427,6 +427,7 @@
     const preferenceFields = ['greenHourly', 'yellowHourly', 'greenMile', 'yellowMile'];
     const allFields = [...rideFields, ...preferenceFields];
     const preferenceStorageKey = 'tripiqDriverPreferences';
+    const maxFareAmount = 2000;
 
     const form = document.getElementById('tripForm');
     const error = document.getElementById('error');
@@ -743,9 +744,14 @@
       const lines = text.split(/\r?\n/);
       let runningIndex = 0;
       const allowStandaloneWholeNumbers = options.allowStandaloneWholeNumbers || false;
+      const flagMalformedFareOnly = options.flagMalformedFareOnly || false;
       const estimatePattern = /(\/\s*active\s*hr|active\s*hr|\/\s*hr|per\s*hr|hr\s*\(est|\(est\))/i;
       const helperAmountPattern = /(included\s*for\s*priority\s*pickup|priority\s*pickup|included|bonus|extra|perk)/i;
       const phoneClockPattern = /\b\d{1,2}[:.]\d{2}\b/;
+      const timeDistancePattern = /\b(min|mins|minute|minutes|mi|mile|miles)\b/i;
+      const ratingPattern = /(%|★|star|rating)/i;
+      const artifactPattern = /^[^\d$S]*[\[\]\|Il]{1,3}\s*\d{1,3}\s*$/i;
+      const malformedFareOnlyPattern = /^[^\d$S]*(?:\$|S)\s*\d{2,4}\s+\d{1,2}\b/i;
       const patterns = [
         { regex: /(?:\$|S)\s*([0-9]{1,3}[.,][0-9]{2})/gi, requiresSymbol: true },
         { regex: /(?:\$|S)\s*([0-9]{1,3})\s+([0-9]{2})\b/gi, requiresSymbol: true },
@@ -759,6 +765,7 @@
         let ignoredReason = estimatePattern.test(line) ? 'same line as hourly estimate text' : '';
         const isStatusBarLine = lineIndex <= 2;
         const looksLikePhoneClock = phoneClockPattern.test(line);
+        const looksLikeRideTimeDistance = timeDistancePattern.test(line);
         const helperMatch = line.match(helperAmountPattern);
         const helperTextIndex = helperMatch ? helperMatch.index : -1;
 
@@ -780,12 +787,22 @@
 
             const rawValue = match[2] ? `${match[1]}.${match[2]}` : match[1];
             const value = toNumber(rawValue);
-            if (value > 0 && value <= 300) {
+            if (value > 0 && value <= maxFareAmount) {
               const candidateLooksLikeClock = looksLikePhoneClock && value < 2;
               const plusBeforeCandidate = line.slice(Math.max(0, match.index - 2), match.index).includes('+');
               const helperCandidate = helperTextIndex >= 0 && (match.index >= helperTextIndex || plusBeforeCandidate);
               const helperIgnoredReason = helperCandidate ? 'same line as helper or bonus amount text' : '';
-              const candidateIgnoredReason = ignoredReason || helperIgnoredReason || (isStatusBarLine && candidateLooksLikeClock ? 'top status-bar phone clock text' : '');
+              const lacksDollarSign = !/[\$S]/i.test(match[0]);
+              const timeDistanceIgnoredReason = looksLikeRideTimeDistance && lacksDollarSign ? 'same line as time or distance text without a dollar sign' : '';
+              const artifactIgnoredReason = artifactPattern.test(line.trim()) && lacksDollarSign ? 'plain numeric OCR artifact line' : '';
+              const ratingIgnoredReason = ratingPattern.test(line) && value >= 4 && value <= 5 ? 'appears to be a rating, not fare' : '';
+              // Tight fare-only crops can split or truncate big fare text, such
+              // as "$120 7" from a true "$129.87". Downgrade that crop artifact
+              // so broader OCR regions can win when they agree on a cleaner fare.
+              const malformedFareOnlyReason = flagMalformedFareOnly && pattern.requiresSymbol && malformedFareOnlyPattern.test(line.trim())
+                ? 'malformed fare-only crop line; possible truncated or split cents'
+                : '';
+              const candidateIgnoredReason = ignoredReason || helperIgnoredReason || timeDistanceIgnoredReason || artifactIgnoredReason || ratingIgnoredReason || malformedFareOnlyReason || (isStatusBarLine && candidateLooksLikeClock ? 'top status-bar phone clock text' : '');
 
               candidates.push({
                 raw: match[0],
@@ -810,9 +827,9 @@
       const candidates = getFareCandidates(text);
       const validCandidates = candidates.filter(candidate => !candidate.ignoredReason);
       const decimalCandidates = validCandidates.filter(candidate => candidate.raw.includes('.') || candidate.raw.includes(','));
-      const fareLikeDecimals = decimalCandidates.filter(candidate => candidate.value >= 2 && candidate.value <= 300);
+      const fareLikeDecimals = decimalCandidates.filter(candidate => candidate.value >= 2 && candidate.value <= maxFareAmount);
       const fareLikeSymbolDecimals = fareLikeDecimals.filter(candidate => candidate.requiresSymbol);
-      const symbolCandidates = validCandidates.filter(candidate => candidate.requiresSymbol && candidate.value >= 2 && candidate.value <= 300);
+      const symbolCandidates = validCandidates.filter(candidate => candidate.requiresSymbol && candidate.value >= 2 && candidate.value <= maxFareAmount);
       const selectionPool = fareLikeSymbolDecimals.length ? fareLikeSymbolDecimals : (symbolCandidates.length ? symbolCandidates : (fareLikeDecimals.length ? fareLikeDecimals : validCandidates));
 
       if (!selectionPool.length) {
@@ -827,16 +844,19 @@
     }
 
     function chooseFareCandidateWithDebug(text, sourceName, options = {}) {
-      const candidates = getFareCandidates(text, options).map(candidate => ({
+      const candidates = getFareCandidates(text, {
+        ...options,
+        flagMalformedFareOnly: options.flagMalformedFareOnly || sourceName === 'fare-only crop'
+      }).map(candidate => ({
         ...candidate,
         source: sourceName,
         selected: false
       }));
       const validCandidates = candidates.filter(candidate => !candidate.ignoredReason);
       const decimalCandidates = validCandidates.filter(candidate => candidate.raw.includes('.') || candidate.raw.includes(','));
-      const fareLikeDecimals = decimalCandidates.filter(candidate => candidate.value >= 2 && candidate.value <= 300);
+      const fareLikeDecimals = decimalCandidates.filter(candidate => candidate.value >= 2 && candidate.value <= maxFareAmount);
       const fareLikeSymbolDecimals = fareLikeDecimals.filter(candidate => candidate.requiresSymbol);
-      const symbolCandidates = validCandidates.filter(candidate => candidate.requiresSymbol && candidate.value >= 2 && candidate.value <= 300);
+      const symbolCandidates = validCandidates.filter(candidate => candidate.requiresSymbol && candidate.value >= 2 && candidate.value <= maxFareAmount);
       const selectionPool = fareLikeSymbolDecimals.length ? fareLikeSymbolDecimals : (symbolCandidates.length ? symbolCandidates : (fareLikeDecimals.length ? fareLikeDecimals : validCandidates));
 
       if (!selectionPool.length) {
@@ -852,15 +872,13 @@
 
     function getFareExtractionDebug(fullText, fareAreaText = '', mainFareText = '', fareOnlyText = '') {
       const sources = [
-        { name: 'fare-only crop', text: fareOnlyText, allowStandaloneWholeNumbers: true, preferLargest: true },
-        { name: 'main fare crop', text: mainFareText, allowStandaloneWholeNumbers: true, preferLargest: true },
-        { name: 'fare area', text: fareAreaText },
-        { name: 'top card', text: getTopRideCardText(fullText) },
-        { name: 'full screenshot', text: fullText }
+        { name: 'fare-only crop', text: fareOnlyText, allowStandaloneWholeNumbers: true, preferLargest: true, priority: 1 },
+        { name: 'main fare crop', text: mainFareText, allowStandaloneWholeNumbers: true, preferLargest: true, priority: 4 },
+        { name: 'fare area', text: fareAreaText, priority: 2 },
+        { name: 'top card', text: getTopRideCardText(fullText), priority: 2 },
+        { name: 'full screenshot', text: fullText, priority: 3 }
       ].filter(Boolean);
       const allCandidates = [];
-      let fare = '';
-      let selected = null;
 
       for (const source of sources) {
         if (!source.text) {
@@ -871,17 +889,103 @@
           allowStandaloneWholeNumbers: Boolean(source.allowStandaloneWholeNumbers),
           preferLargest: Boolean(source.preferLargest)
         });
-        allCandidates.push(...result.candidates);
+        allCandidates.push(...result.candidates.map(candidate => ({
+          ...candidate,
+          selected: false,
+          sourcePriority: source.priority
+        })));
+      }
 
-        if (!fare && result.fare) {
-          fare = result.fare;
-          selected = result.selected;
+      const validCandidates = allCandidates.filter(candidate => !candidate.ignoredReason && candidate.value >= 2 && candidate.value <= maxFareAmount);
+      const symbolCandidates = validCandidates.filter(candidate => candidate.requiresSymbol);
+      const plainCandidates = validCandidates.filter(candidate => !candidate.requiresSymbol);
+      let selected = null;
+      let reason = '';
+
+      if (symbolCandidates.length) {
+        const groups = new Map();
+
+        for (const candidate of symbolCandidates) {
+          if (!groups.has(candidate.normalized)) {
+            groups.set(candidate.normalized, []);
+          }
+          groups.get(candidate.normalized).push(candidate);
+        }
+
+        // Dollar-sign fare candidates are grouped by value. When OCR regions
+        // disagree, prefer the fare seen in the most regions, then the cleaner
+        // decimal fare, instead of blindly trusting the narrow fare-only crop.
+        const rankedGroups = Array.from(groups.values()).sort((firstGroup, secondGroup) => {
+          const firstSources = new Set(firstGroup.map(candidate => candidate.source)).size;
+          const secondSources = new Set(secondGroup.map(candidate => candidate.source)).size;
+          if (firstSources !== secondSources) {
+            return secondSources - firstSources;
+          }
+
+          const firstHasDecimal = firstGroup.some(candidate => /[.,]/.test(candidate.raw));
+          const secondHasDecimal = secondGroup.some(candidate => /[.,]/.test(candidate.raw));
+          if (firstHasDecimal !== secondHasDecimal) {
+            return Number(secondHasDecimal) - Number(firstHasDecimal);
+          }
+
+          const firstBestPriority = Math.min(...firstGroup.map(candidate => candidate.sourcePriority));
+          const secondBestPriority = Math.min(...secondGroup.map(candidate => candidate.sourcePriority));
+          if (firstBestPriority !== secondBestPriority) {
+            return firstBestPriority - secondBestPriority;
+          }
+
+          const firstBestIndex = Math.min(...firstGroup.map(candidate => candidate.index));
+          const secondBestIndex = Math.min(...secondGroup.map(candidate => candidate.index));
+          return firstBestIndex - secondBestIndex;
+        });
+
+        const winningGroup = rankedGroups[0] || [];
+        selected = winningGroup
+          .sort((first, second) => {
+            if (first.sourcePriority !== second.sourcePriority) {
+              return first.sourcePriority - second.sourcePriority;
+            }
+            return first.index - second.index;
+          })[0] || null;
+
+        if (selected) {
+          const sources = Array.from(new Set(winningGroup.map(candidate => candidate.source))).join(', ');
+          const regionCount = new Set(winningGroup.map(candidate => candidate.source)).size;
+          reason = `${selected.normalized} selected because a dollar-sign fare appeared in ${regionCount} OCR region${regionCount === 1 ? '' : 's'}: ${sources}`;
+          selected.selectionReason = reason;
+        }
+      } else {
+        selected = plainCandidates
+          .sort((first, second) => {
+            if (first.sourcePriority !== second.sourcePriority) {
+              return first.sourcePriority - second.sourcePriority;
+            }
+            if (first.sourcePriority <= 1) {
+              return second.value - first.value;
+            }
+            return first.index - second.index;
+          })[0] || null;
+
+        if (selected) {
+          reason = `${selected.normalized} selected as a plain numeric fallback because no valid dollar-sign fare was found`;
+          selected.selectionReason = reason;
+        }
+      }
+
+      if (selected) {
+        selected.selected = true;
+      }
+
+      for (const candidate of allCandidates) {
+        if (!candidate.selected && !candidate.ignoredReason && !candidate.requiresSymbol && symbolCandidates.length) {
+          candidate.ignoredReason = 'plain numeric fare candidate downgraded because a dollar-sign fare was found';
         }
       }
 
       return {
-        fare,
+        fare: selected ? selected.normalized : '',
         selected,
+        reason,
         candidates: allCandidates
       };
     }
@@ -891,7 +995,9 @@
     }
 
     function formatFareCandidateDebug(candidate) {
-      const status = candidate.selected ? 'selected' : (candidate.ignoredReason ? `ignored: ${candidate.ignoredReason}` : 'valid');
+      const status = candidate.selected
+        ? `selected${candidate.selectionReason ? `: ${candidate.selectionReason}` : ''}`
+        : (candidate.ignoredReason ? `ignored: ${candidate.ignoredReason}` : 'valid');
       return `${candidate.raw.trim()} -> ${candidate.normalized} [${status}; ${candidate.source}; line: ${candidate.line || '(blank)'}]`;
     }
 
@@ -899,24 +1005,38 @@
       return Number.isInteger(totalMinutes) ? String(totalMinutes) : totalMinutes.toFixed(1).replace(/\.0$/, '');
     }
 
+    function normalizeTimeMinuteToken(value) {
+      return /^[lI|]$/.test(String(value).trim()) ? 1 : toNumber(value);
+    }
+
+    function normalizeTimePhrase(hours, minutes, hasHourPhrase) {
+      if (hasHourPhrase) {
+        return minutes > 0 ? `${formatExtractedMinutes(hours)} hr ${formatExtractedMinutes(minutes)} min` : `${formatExtractedMinutes(hours)} hr`;
+      }
+
+      return `${formatExtractedMinutes(minutes)} min`;
+    }
+
     function extractTimeValues(text) {
       const matches = [];
       let maskedText = text;
-      const hourPattern = /(\d+(?:[.,]\d+)?)\s*(?:hours|hour|hrs|hr)\s*(?:(\d+(?:[.,]\d+)?)\s*(?:minutes|minute|mins|min))?/gi;
+      const hourPattern = /(\d+(?:[.,]\d+)?)\s*(?:hours|hour|hrs|hr)\s*(?:([lI|]|\d+(?:[.,]\d+)?)\s*(?:minutes|minute|mins|min)?)?/gi;
       const minutePattern = /(\d+(?:[.,]\d+)?)\s*(?:minutes|minute|mins|min)/gi;
 
       // OCR time parser: first capture Uber-style combined phrases like
-      // "2 hr 52 min", "2 hr52min", and "2hr52min" as one span, then mask
-      // that span so "52 min" is not extracted again as standalone minutes.
+      // "2 hr 52 min", "2hr52min", and malformed "1hrlmin" as one span.
+      // OCR often reads the minute digit "1" as lowercase "l", so normalize
+      // that token before converting the phrase to total minutes.
       for (const match of text.matchAll(hourPattern)) {
         const hours = toNumber(match[1]);
-        const minutes = match[2] ? toNumber(match[2]) : 0;
+        const minutes = match[2] ? normalizeTimeMinuteToken(match[2]) : 0;
         const totalMinutes = (hours * 60) + minutes;
 
         if (totalMinutes > 0) {
           matches.push({
             index: match.index,
             phrase: match[0],
+            normalizedPhrase: normalizeTimePhrase(hours, minutes, true),
             value: formatExtractedMinutes(totalMinutes)
           });
         }
@@ -932,6 +1052,7 @@
           matches.push({
             index: match.index,
             phrase: match[0],
+            normalizedPhrase: normalizeTimePhrase(0, totalMinutes, false),
             value: formatExtractedMinutes(totalMinutes)
           });
         }
@@ -1104,10 +1225,12 @@
         const ridePairDebug = extractRideTimeDistancePairs(text);
         const extractedTimeMatches = extractTimeValues(text);
         const extractedTimePhrases = extractedTimeMatches.map(match => match.phrase.trim());
+        const normalizedTimePhrases = extractedTimeMatches.map(match => match.normalizedPhrase);
         const extractedTimeValues = extractedTimeMatches.map(match => match.value);
         const ignoredTimeLines = ridePairDebug.ignoredTimeLines.length ? ridePairDebug.ignoredTimeLines : ['none'];
         const selectedPickupPair = ridePairDebug.pairs[0] ? `${ridePairDebug.pairs[0].time} min / ${ridePairDebug.pairs[0].distance} mi from "${ridePairDebug.pairs[0].line}"` : 'none';
         const selectedTripPair = ridePairDebug.pairs[1] ? `${ridePairDebug.pairs[1].time} min / ${ridePairDebug.pairs[1].distance} mi from "${ridePairDebug.pairs[1].line}"` : 'none';
+        const selectedTripTimeDebug = ridePairDebug.pairs[1] ? ridePairDebug.pairs[1].time : 'none';
         const fareCandidateLines = fareDebug.candidates.length
           ? fareDebug.candidates.map(formatFareCandidateDebug)
           : ['No dollar candidates found.'];
@@ -1115,12 +1238,15 @@
         const needsFareReview = shouldFlagFareForReview(details);
 
         ocrText.textContent = [
-          `Extracted time phrases: [${extractedTimePhrases.join(', ')}]`,
+          `Original time phrases: [${extractedTimePhrases.join(', ')}]`,
+          `Normalized time phrases: [${normalizedTimePhrases.join(', ')}]`,
           `Extracted time values: [${extractedTimeValues.join(', ')}]`,
+          `Parsed trip time: ${selectedTripTimeDebug}`,
           `Ignored time lines: [${ignoredTimeLines.join(' | ')}]`,
           `Selected pickup time/distance: ${selectedPickupPair}`,
           `Selected trip time/distance: ${selectedTripPair}`,
           `Selected fare candidate: ${fareDebug.selected ? formatFareCandidateDebug(fareDebug.selected) : 'none'}`,
+          `Fare selection reason: ${fareDebug.reason || 'none'}`,
           'All dollar candidates:',
           ...fareCandidateLines,
           '',
