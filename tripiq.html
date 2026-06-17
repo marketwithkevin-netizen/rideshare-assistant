@@ -123,7 +123,8 @@
     }
 
     .actions,
-    .ocr-actions {
+    .ocr-actions,
+    .real-time-actions {
       display: grid;
       grid-template-columns: 1fr;
       gap: 12px;
@@ -147,8 +148,31 @@
     }
 
     .analyze,
-    .read-screenshot {
+    .read-screenshot,
+    .real-time-toggle,
+    .real-time-capture {
       background: var(--focus);
+    }
+
+    .real-time-toggle.active {
+      background: var(--green);
+    }
+
+    .real-time-capture {
+      background: var(--yellow);
+    }
+
+    .experimental-section {
+      border-style: dashed;
+    }
+
+    .experimental-section.disabled {
+      opacity: 0.82;
+    }
+
+    .experimental-section.disabled button {
+      cursor: not-allowed;
+      opacity: 0.58;
     }
 
     .clear {
@@ -299,6 +323,112 @@
       font-size: 18px;
     }
 
+    .real-time-log {
+      min-height: 88px;
+      max-height: 160px;
+      margin: 12px 0 0;
+      padding: 12px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      color: var(--muted);
+      font-family: Consolas, Monaco, monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+
+    .tripiq-floating {
+      position: fixed;
+      right: 16px;
+      bottom: 18px;
+      z-index: 30;
+      width: 78px;
+      min-height: 78px;
+      border-radius: 50%;
+      padding: 10px;
+      background: var(--focus);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.42);
+      font-size: 16px;
+      line-height: 1.05;
+    }
+
+    .tripiq-floating[hidden] {
+      display: none;
+    }
+
+    .tripiq-overlay {
+      position: fixed;
+      top: 10px;
+      left: 50%;
+      z-index: 40;
+      width: min(calc(100% - 24px), 420px);
+      padding: 12px 14px;
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      background: rgba(26, 30, 34, 0.96);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+      transform: translateX(-50%);
+    }
+
+    .tripiq-overlay[hidden] {
+      display: none;
+    }
+
+    .tripiq-overlay.go {
+      border-color: var(--green);
+      background: rgba(18, 51, 33, 0.96);
+    }
+
+    .tripiq-overlay.maybe {
+      border-color: var(--yellow);
+      background: rgba(51, 42, 17, 0.96);
+    }
+
+    .tripiq-overlay.no-go {
+      border-color: var(--red);
+      background: rgba(55, 25, 27, 0.96);
+    }
+
+    .overlay-topline {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .overlay-decision {
+      font-size: 30px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .overlay-sub {
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .overlay-metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      font-size: 15px;
+    }
+
+    .overlay-metrics span {
+      display: grid;
+      gap: 1px;
+      color: var(--muted);
+    }
+
+    .overlay-metrics strong {
+      color: var(--text);
+      font-size: 18px;
+    }
+
     .disclaimer {
       margin: 18px 0 0;
       color: var(--muted);
@@ -333,6 +463,17 @@
     </header>
 
     <form id="tripForm" novalidate>
+      <section class="experimental-section" id="realTimeSection" aria-labelledby="realTimeHeading">
+        <h2 id="realTimeHeading">Experimental Browser Test Mode</h2>
+        <p class="helper-note">The stable MVP is still screenshot upload. This browser test mode is disabled by default because true real-time use needs a native Android app with screen capture and overlay permission.</p>
+        <div class="real-time-actions">
+          <button class="real-time-toggle" type="button" id="realTimeToggle">Start Browser Test Mode</button>
+          <button class="real-time-capture" type="button" id="realTimeCapture" hidden>Scan Ride Now</button>
+        </div>
+        <div id="realTimeStatus" class="ocr-status" role="status"></div>
+        <pre id="realTimeLog" class="real-time-log">Experimental Browser Test Mode is off.</pre>
+      </section>
+
       <section aria-labelledby="uploadHeading">
         <h2 id="uploadHeading">Upload Ride Screenshot</h2>
         <p class="helper-note">Upload is optional. TripIQ can try to read a ride screenshot, fill the numbers below, and let you correct anything before analyzing.</p>
@@ -422,12 +563,29 @@
     <p class="disclaimer">TripIQ is an estimate tool. Actual earnings may vary due to traffic, wait time, platform fees, tips, cancellations, and other factors.</p>
   </main>
 
+  <button class="tripiq-floating" type="button" id="floatingScan" hidden>TripIQ Scan</button>
+
+  <aside id="tripOverlay" class="tripiq-overlay" aria-live="polite" hidden>
+    <div class="overlay-topline">
+      <div id="overlayDecision" class="overlay-decision">GO</div>
+      <div class="overlay-sub">TripIQ</div>
+    </div>
+    <div class="overlay-metrics">
+      <span>Hourly<strong id="overlayHourly">$0.00/hr</strong></span>
+      <span>Mile<strong id="overlayMile">$0.00/mi</strong></span>
+      <span>Time<strong id="overlayTime">0 min</strong></span>
+      <span>Miles<strong id="overlayMiles">0 mi</strong></span>
+    </div>
+  </aside>
+
   <script>
     const rideFields = ['ridePay', 'pickupTime', 'pickupDistance', 'tripTime', 'tripDistance'];
     const preferenceFields = ['greenHourly', 'yellowHourly', 'greenMile', 'yellowMile'];
     const allFields = [...rideFields, ...preferenceFields];
     const preferenceStorageKey = 'tripiqDriverPreferences';
     const maxFareAmount = 2000;
+    const enableBrowserRealTimeTestMode = false;
+    const browserRealTimeUnsupportedMessage = 'Browser real-time capture is not supported in this environment. Screenshot upload still works. Native Android overlay mode will be needed for true real-time use.';
 
     const form = document.getElementById('tripForm');
     const error = document.getElementById('error');
@@ -438,8 +596,24 @@
     const readScreenshot = document.getElementById('readScreenshot');
     const ocrStatus = document.getElementById('ocrStatus');
     const ocrText = document.getElementById('ocrText');
+    const realTimeSection = document.getElementById('realTimeSection');
+    const realTimeToggle = document.getElementById('realTimeToggle');
+    const realTimeCapture = document.getElementById('realTimeCapture');
+    const realTimeStatus = document.getElementById('realTimeStatus');
+    const realTimeLog = document.getElementById('realTimeLog');
+    const floatingScan = document.getElementById('floatingScan');
+    const tripOverlay = document.getElementById('tripOverlay');
+    const overlayDecision = document.getElementById('overlayDecision');
+    const overlayHourly = document.getElementById('overlayHourly');
+    const overlayMile = document.getElementById('overlayMile');
+    const overlayTime = document.getElementById('overlayTime');
+    const overlayMiles = document.getElementById('overlayMiles');
 
     let previewUrl = '';
+    let realTimeStream = null;
+    let realTimeVideo = null;
+    let realTimeBusy = false;
+    let overlayTimer = 0;
 
     function getNumber(id) {
       return Number(document.getElementById(id).value);
@@ -535,6 +709,64 @@
       return `This ride is a NO GO because ${misses.join(' and ')}.`;
     }
 
+    function getThresholds() {
+      return {
+        greenHourly: getNumber('greenHourly'),
+        yellowHourly: getNumber('yellowHourly'),
+        greenMile: getNumber('greenMile'),
+        yellowMile: getNumber('yellowMile')
+      };
+    }
+
+    function calculateTripAnalysis(details, thresholds = getThresholds()) {
+      const ridePay = toNumber(details.ridePay);
+      const totalTime = toNumber(details.pickupTime) + toNumber(details.tripTime);
+      const totalMiles = toNumber(details.pickupDistance) + toNumber(details.tripDistance);
+      const hourlyRate = ridePay / (totalTime / 60);
+      const payPerMile = ridePay / totalMiles;
+      let decision = 'NO GO';
+      let className = 'no-go';
+
+      if (hourlyRate >= thresholds.greenHourly && payPerMile >= thresholds.greenMile) {
+        decision = 'GO';
+        className = 'go';
+      } else if (hourlyRate >= thresholds.yellowHourly && payPerMile >= thresholds.yellowMile) {
+        decision = 'MAYBE';
+        className = 'maybe';
+      }
+
+      return {
+        decision,
+        className,
+        hourlyRate,
+        payPerMile,
+        totalTime,
+        totalMiles,
+        thresholds
+      };
+    }
+
+    function getInputDetails() {
+      return {
+        ridePay: document.getElementById('ridePay').value,
+        pickupTime: document.getElementById('pickupTime').value,
+        pickupDistance: document.getElementById('pickupDistance').value,
+        tripTime: document.getElementById('tripTime').value,
+        tripDistance: document.getElementById('tripDistance').value
+      };
+    }
+
+    function renderMainResult(analysis) {
+      result.className = `result ${analysis.className}`;
+      document.getElementById('decision').textContent = analysis.decision;
+      document.getElementById('hourlyRate').textContent = `${formatMoney(analysis.hourlyRate)}/hr`;
+      document.getElementById('payPerMile').textContent = `${formatMoney(analysis.payPerMile)}/mile`;
+      document.getElementById('totalTime').textContent = `${formatNumber(analysis.totalTime)} minutes`;
+      document.getElementById('totalMiles').textContent = `${formatNumber(analysis.totalMiles)} miles`;
+      document.getElementById('explanation').textContent = buildExplanation(analysis.decision, analysis.hourlyRate, analysis.payPerMile, analysis.thresholds);
+      result.style.display = 'block';
+    }
+
     function loadSavedPreferences() {
       try {
         const savedPreferences = JSON.parse(localStorage.getItem(preferenceStorageKey));
@@ -582,37 +814,7 @@
 
       clearError();
 
-      const ridePay = getNumber('ridePay');
-      const totalTime = getNumber('pickupTime') + getNumber('tripTime');
-      const totalMiles = getNumber('pickupDistance') + getNumber('tripDistance');
-      const hourlyRate = ridePay / (totalTime / 60);
-      const payPerMile = ridePay / totalMiles;
-      const thresholds = {
-        greenHourly: getNumber('greenHourly'),
-        yellowHourly: getNumber('yellowHourly'),
-        greenMile: getNumber('greenMile'),
-        yellowMile: getNumber('yellowMile')
-      };
-
-      let decision = 'NO GO';
-      let className = 'no-go';
-
-      if (hourlyRate >= thresholds.greenHourly && payPerMile >= thresholds.greenMile) {
-        decision = 'GO';
-        className = 'go';
-      } else if (hourlyRate >= thresholds.yellowHourly && payPerMile >= thresholds.yellowMile) {
-        decision = 'MAYBE';
-        className = 'maybe';
-      }
-
-      result.className = `result ${className}`;
-      document.getElementById('decision').textContent = decision;
-      document.getElementById('hourlyRate').textContent = `${formatMoney(hourlyRate)}/hr`;
-      document.getElementById('payPerMile').textContent = `${formatMoney(payPerMile)}/mile`;
-      document.getElementById('totalTime').textContent = `${formatNumber(totalTime)} minutes`;
-      document.getElementById('totalMiles').textContent = `${formatNumber(totalMiles)} miles`;
-      document.getElementById('explanation').textContent = buildExplanation(decision, hourlyRate, payPerMile, thresholds);
-      result.style.display = 'block';
+      renderMainResult(calculateTripAnalysis(getInputDetails()));
       return true;
     }
 
@@ -1155,17 +1357,168 @@
     }
 
     async function runOcrOnCanvas(canvas, label, options = {}) {
+      const statusCallback = options.statusCallback || showOcrStatus;
+      const tesseractOptions = { ...options };
+      delete tesseractOptions.statusCallback;
+
       const result = await Tesseract.recognize(canvas, 'eng', {
-        ...options,
+        ...tesseractOptions,
         logger(progress) {
           if (progress.status === 'recognizing text' && progress.progress) {
             const percent = Math.round(progress.progress * 100);
-            showOcrStatus(`${label}... ${percent}%`, 'warning');
+            statusCallback(`${label}... ${percent}%`, 'warning');
           }
         }
       });
 
       return result.data.text.trim();
+    }
+
+    function buildOcrDebugText(ocrResult) {
+      const fareCandidateLines = ocrResult.fareDebug.candidates.length
+        ? ocrResult.fareDebug.candidates.map(formatFareCandidateDebug)
+        : ['No dollar candidates found.'];
+
+      return [
+        `Ride request detected: ${ocrResult.rideDetection.detected ? 'yes' : 'no'} (${ocrResult.rideDetection.reason})`,
+        `Detection signals: [${ocrResult.rideDetection.signals.join(' | ') || 'none'}]`,
+        `Original time phrases: [${ocrResult.extractedTimePhrases.join(', ')}]`,
+        `Normalized time phrases: [${ocrResult.normalizedTimePhrases.join(', ')}]`,
+        `Extracted time values: [${ocrResult.extractedTimeValues.join(', ')}]`,
+        `Parsed trip time: ${ocrResult.selectedTripTimeDebug}`,
+        `Ignored time lines: [${ocrResult.ignoredTimeLines.join(' | ')}]`,
+        `Selected pickup time/distance: ${ocrResult.selectedPickupPair}`,
+        `Selected trip time/distance: ${ocrResult.selectedTripPair}`,
+        `Selected fare candidate: ${ocrResult.fareDebug.selected ? formatFareCandidateDebug(ocrResult.fareDebug.selected) : 'none'}`,
+        `Fare selection reason: ${ocrResult.fareDebug.reason || 'none'}`,
+        'All dollar candidates:',
+        ...fareCandidateLines,
+        '',
+        `Detected ride card crop (${ocrResult.cardCrop.source}): ${formatCropDebug(ocrResult.cardCrop)}`,
+        `Main fare crop (${ocrResult.mainFareCrop.source}): ${formatCropDebug(ocrResult.mainFareCrop)}`,
+        `Fare-only crop (${ocrResult.fareOnlyCrop.source}): ${formatCropDebug(ocrResult.fareOnlyCrop)}`,
+        `Selected fare-only candidate: ${ocrResult.fareDebug.selected && ocrResult.fareDebug.selected.source === 'fare-only crop' ? formatFareCandidateDebug(ocrResult.fareDebug.selected) : 'none'}`,
+        '',
+        '--- Fare-Only Crop OCR ---',
+        ocrResult.fareOnlyText || 'No fare-only crop text detected.',
+        '',
+        '--- Main Fare Crop OCR ---',
+        ocrResult.mainFareText || 'No main fare crop text detected.',
+        '',
+        '--- Fare Area OCR ---',
+        ocrResult.fareAreaText || 'No fare-area text detected.',
+        '',
+        '--- Full Screenshot OCR ---',
+        ocrResult.text || 'OCR did not detect readable text.'
+      ].join('\n');
+    }
+
+    function detectRideRequestCard(text, fareAreaText, fareDebug, details, cardCrop, image) {
+      const combinedText = `${fareAreaText}\n${text}`;
+      const ridePairCount = extractRideTimeDistancePairs(combinedText).pairs.length;
+      const hasFare = Boolean(fareDebug.fare);
+      const hasServiceLabel = /\b(UberX|UberXL|Uber\s*XL|Comfort|Black|Premier|Green|Pet|Share|Lyft|Exclusive|Verified)\b/i.test(combinedText);
+      const hasActionButton = /\b(Accept|Match)\b/i.test(combinedText);
+      const hasRideTimes = ridePairCount >= 2 || (details.pickupTime && details.tripTime && details.pickupDistance && details.tripDistance);
+      const isLowerCard = cardCrop.y >= image.height * 0.35;
+      const signals = [];
+
+      if (isLowerCard) {
+        signals.push('lower-screen card crop');
+      }
+      if (hasFare) {
+        signals.push('fare candidate');
+      }
+      if (hasServiceLabel) {
+        signals.push('service label');
+      }
+      if (hasActionButton) {
+        signals.push('Accept/Match text');
+      }
+      if (hasRideTimes) {
+        signals.push('pickup/trip time-distance rows');
+      }
+
+      const score = (isLowerCard ? 1 : 0) + (hasFare ? 2 : 0) + (hasRideTimes ? 3 : 0) + (hasServiceLabel ? 1 : 0) + (hasActionButton ? 1 : 0);
+      const detected = hasFare && hasRideTimes && score >= 5;
+
+      return {
+        detected,
+        score,
+        signals,
+        reason: detected ? `score ${score}` : `score ${score}; waiting for fare plus pickup/trip rows`
+      };
+    }
+
+    async function processRideImage(image, statusCallback = showOcrStatus) {
+      const cardCrop = detectRideCardCrop(image);
+      const mainFareCrop = getMainFareCrop(cardCrop);
+      const fareOnlyCrop = getFareOnlyCrop(cardCrop);
+      const fullCanvas = preprocessCanvas(image, { scale: 2, contrast: 1.45 });
+      const fareCanvas = preprocessCanvas(image, {
+        scale: 3,
+        contrast: 1.6,
+        crop: cardCrop
+      });
+      const mainFareCanvas = preprocessCanvas(image, {
+        scale: 4,
+        contrast: 1.9,
+        threshold: 150,
+        crop: mainFareCrop
+      });
+      const fareOnlyCanvas = preprocessCanvas(image, {
+        scale: 5,
+        contrast: 2.2,
+        threshold: 135,
+        crop: fareOnlyCrop
+      });
+
+      // Fare-area OCR targets the ride request card, not the map/status bar.
+      const fareOnlyText = await runOcrOnCanvas(fareOnlyCanvas, 'Reading fare-only area', {
+        tessedit_char_whitelist: '$S0123456789.,',
+        tessedit_pageseg_mode: '7',
+        statusCallback
+      });
+      const mainFareText = await runOcrOnCanvas(mainFareCanvas, 'Reading main fare area', { statusCallback });
+      const fareAreaText = await runOcrOnCanvas(fareCanvas, 'Reading fare area', { statusCallback });
+      const text = await runOcrOnCanvas(fullCanvas, 'Reading full screenshot', { statusCallback });
+      const fareDebug = getFareExtractionDebug(text, fareAreaText, mainFareText, fareOnlyText);
+      const details = extractRideDetails(text, fareAreaText);
+      details.ridePay = fareDebug.fare;
+      const ridePairDebug = extractRideTimeDistancePairs(text);
+      const extractedTimeMatches = extractTimeValues(text);
+      const extractedTimePhrases = extractedTimeMatches.map(match => match.phrase.trim());
+      const normalizedTimePhrases = extractedTimeMatches.map(match => match.normalizedPhrase);
+      const extractedTimeValues = extractedTimeMatches.map(match => match.value);
+      const ignoredTimeLines = ridePairDebug.ignoredTimeLines.length ? ridePairDebug.ignoredTimeLines : ['none'];
+      const selectedPickupPair = ridePairDebug.pairs[0] ? `${ridePairDebug.pairs[0].time} min / ${ridePairDebug.pairs[0].distance} mi from "${ridePairDebug.pairs[0].line}"` : 'none';
+      const selectedTripPair = ridePairDebug.pairs[1] ? `${ridePairDebug.pairs[1].time} min / ${ridePairDebug.pairs[1].distance} mi from "${ridePairDebug.pairs[1].line}"` : 'none';
+      const selectedTripTimeDebug = ridePairDebug.pairs[1] ? ridePairDebug.pairs[1].time : 'none';
+      const rideDetection = detectRideRequestCard(text, fareAreaText, fareDebug, details, cardCrop, image);
+
+      const ocrResult = {
+        cardCrop,
+        mainFareCrop,
+        fareOnlyCrop,
+        fareOnlyText,
+        mainFareText,
+        fareAreaText,
+        text,
+        fareDebug,
+        details,
+        rideDetection,
+        ridePairDebug,
+        extractedTimePhrases,
+        normalizedTimePhrases,
+        extractedTimeValues,
+        ignoredTimeLines,
+        selectedPickupPair,
+        selectedTripPair,
+        selectedTripTimeDebug
+      };
+
+      ocrResult.debugText = buildOcrDebugText(ocrResult);
+      return ocrResult;
     }
 
     async function readScreenshotText() {
@@ -1189,85 +1542,12 @@
 
       try {
         const image = await loadImage(file);
-        const cardCrop = detectRideCardCrop(image);
-        const mainFareCrop = getMainFareCrop(cardCrop);
-        const fareOnlyCrop = getFareOnlyCrop(cardCrop);
-        const fullCanvas = preprocessCanvas(image, { scale: 2, contrast: 1.45 });
-        const fareCanvas = preprocessCanvas(image, {
-          scale: 3,
-          contrast: 1.6,
-          crop: cardCrop
-        });
-        const mainFareCanvas = preprocessCanvas(image, {
-          scale: 4,
-          contrast: 1.9,
-          threshold: 150,
-          crop: mainFareCrop
-        });
-        const fareOnlyCanvas = preprocessCanvas(image, {
-          scale: 5,
-          contrast: 2.2,
-          threshold: 135,
-          crop: fareOnlyCrop
-        });
+        const ocrResult = await processRideImage(image);
+        const missing = describeMissingDetails(ocrResult.details);
+        const needsFareReview = shouldFlagFareForReview(ocrResult.details);
 
-        // Fare-area OCR targets the ride request card, not the map/status bar.
-        const fareOnlyText = await runOcrOnCanvas(fareOnlyCanvas, 'Reading fare-only area', {
-          tessedit_char_whitelist: '$S0123456789.,',
-          tessedit_pageseg_mode: '7'
-        });
-        const mainFareText = await runOcrOnCanvas(mainFareCanvas, 'Reading main fare area');
-        const fareAreaText = await runOcrOnCanvas(fareCanvas, 'Reading fare area');
-        const text = await runOcrOnCanvas(fullCanvas, 'Reading full screenshot');
-        const fareDebug = getFareExtractionDebug(text, fareAreaText, mainFareText, fareOnlyText);
-        const details = extractRideDetails(text, fareAreaText);
-        details.ridePay = fareDebug.fare;
-        const ridePairDebug = extractRideTimeDistancePairs(text);
-        const extractedTimeMatches = extractTimeValues(text);
-        const extractedTimePhrases = extractedTimeMatches.map(match => match.phrase.trim());
-        const normalizedTimePhrases = extractedTimeMatches.map(match => match.normalizedPhrase);
-        const extractedTimeValues = extractedTimeMatches.map(match => match.value);
-        const ignoredTimeLines = ridePairDebug.ignoredTimeLines.length ? ridePairDebug.ignoredTimeLines : ['none'];
-        const selectedPickupPair = ridePairDebug.pairs[0] ? `${ridePairDebug.pairs[0].time} min / ${ridePairDebug.pairs[0].distance} mi from "${ridePairDebug.pairs[0].line}"` : 'none';
-        const selectedTripPair = ridePairDebug.pairs[1] ? `${ridePairDebug.pairs[1].time} min / ${ridePairDebug.pairs[1].distance} mi from "${ridePairDebug.pairs[1].line}"` : 'none';
-        const selectedTripTimeDebug = ridePairDebug.pairs[1] ? ridePairDebug.pairs[1].time : 'none';
-        const fareCandidateLines = fareDebug.candidates.length
-          ? fareDebug.candidates.map(formatFareCandidateDebug)
-          : ['No dollar candidates found.'];
-        const missing = describeMissingDetails(details);
-        const needsFareReview = shouldFlagFareForReview(details);
-
-        ocrText.textContent = [
-          `Original time phrases: [${extractedTimePhrases.join(', ')}]`,
-          `Normalized time phrases: [${normalizedTimePhrases.join(', ')}]`,
-          `Extracted time values: [${extractedTimeValues.join(', ')}]`,
-          `Parsed trip time: ${selectedTripTimeDebug}`,
-          `Ignored time lines: [${ignoredTimeLines.join(' | ')}]`,
-          `Selected pickup time/distance: ${selectedPickupPair}`,
-          `Selected trip time/distance: ${selectedTripPair}`,
-          `Selected fare candidate: ${fareDebug.selected ? formatFareCandidateDebug(fareDebug.selected) : 'none'}`,
-          `Fare selection reason: ${fareDebug.reason || 'none'}`,
-          'All dollar candidates:',
-          ...fareCandidateLines,
-          '',
-          `Detected ride card crop (${cardCrop.source}): ${formatCropDebug(cardCrop)}`,
-          `Main fare crop (${mainFareCrop.source}): ${formatCropDebug(mainFareCrop)}`,
-          `Fare-only crop (${fareOnlyCrop.source}): ${formatCropDebug(fareOnlyCrop)}`,
-          `Selected fare-only candidate: ${fareDebug.selected && fareDebug.selected.source === 'fare-only crop' ? formatFareCandidateDebug(fareDebug.selected) : 'none'}`,
-          '',
-          '--- Fare-Only Crop OCR ---',
-          fareOnlyText || 'No fare-only crop text detected.',
-          '',
-          '--- Main Fare Crop OCR ---',
-          mainFareText || 'No main fare crop text detected.',
-          '',
-          '--- Fare Area OCR ---',
-          fareAreaText || 'No fare-area text detected.',
-          '',
-          '--- Full Screenshot OCR ---',
-          text || 'OCR did not detect readable text.'
-        ].join('\n');
-        applyExtractedDetails(details);
+        ocrText.textContent = ocrResult.debugText;
+        applyExtractedDetails(ocrResult.details);
         setRidePayReviewFlag(needsFareReview);
 
         if (missing.length || needsFareReview) {
@@ -1292,6 +1572,192 @@
       } finally {
         readScreenshot.disabled = false;
         readScreenshot.textContent = 'Read Screenshot';
+      }
+    }
+
+    function showRealTimeStatus(message, type = 'warning') {
+      realTimeStatus.textContent = message;
+      realTimeStatus.className = `ocr-status ${type}`;
+    }
+
+    function initializeRealTimeTestMode() {
+      const canUseBrowserCapture = Boolean(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+      const shouldDisable = !enableBrowserRealTimeTestMode || !canUseBrowserCapture;
+
+      realTimeSection.classList.toggle('disabled', shouldDisable);
+      realTimeToggle.disabled = shouldDisable;
+      realTimeCapture.disabled = shouldDisable;
+      realTimeCapture.hidden = true;
+      floatingScan.hidden = true;
+
+      if (shouldDisable) {
+        showRealTimeStatus(browserRealTimeUnsupportedMessage, 'warning');
+        realTimeLog.textContent = browserRealTimeUnsupportedMessage;
+      } else {
+        showRealTimeStatus('Experimental Browser Test Mode is available. Screenshot upload remains the stable MVP.', 'warning');
+        realTimeLog.textContent = 'Experimental Browser Test Mode is off.';
+      }
+    }
+
+    function logRealTime(message) {
+      const timestamp = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+      const currentLog = realTimeLog.textContent === 'Experimental Browser Test Mode is off.' ? '' : realTimeLog.textContent;
+      realTimeLog.textContent = `[${timestamp}] ${message}\n${currentLog}`.trim();
+    }
+
+    function setRealTimeActive(isActive) {
+      realTimeToggle.textContent = isActive ? 'Stop Browser Test Mode' : 'Start Browser Test Mode';
+      realTimeToggle.classList.toggle('active', isActive);
+      realTimeCapture.hidden = !isActive;
+      floatingScan.hidden = !isActive;
+    }
+
+    function hideTripOverlay() {
+      window.clearTimeout(overlayTimer);
+      tripOverlay.hidden = true;
+    }
+
+    function showTripOverlay(analysis) {
+      window.clearTimeout(overlayTimer);
+      tripOverlay.className = `tripiq-overlay ${analysis.className}`;
+      overlayDecision.textContent = analysis.decision;
+      overlayHourly.textContent = `${formatMoney(analysis.hourlyRate)}/hr`;
+      overlayMile.textContent = `${formatMoney(analysis.payPerMile)}/mi`;
+      overlayTime.textContent = `${formatNumber(analysis.totalTime)} min`;
+      overlayMiles.textContent = `${formatNumber(analysis.totalMiles)} mi`;
+      tripOverlay.hidden = false;
+      overlayTimer = window.setTimeout(hideTripOverlay, 6500);
+    }
+
+    function stopRealTimeMode(message = 'Experimental Browser Test Mode stopped.') {
+      if (realTimeStream) {
+        for (const track of realTimeStream.getTracks()) {
+          track.stop();
+        }
+      }
+
+      realTimeStream = null;
+      realTimeVideo = null;
+      realTimeBusy = false;
+      setRealTimeActive(false);
+      hideTripOverlay();
+      showRealTimeStatus(message, 'warning');
+      logRealTime(message);
+    }
+
+    async function startRealTimeMode() {
+      if (!enableBrowserRealTimeTestMode) {
+        showRealTimeStatus(browserRealTimeUnsupportedMessage, 'warning');
+        logRealTime('Browser test mode is behind the feature flag.');
+        return;
+      }
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        showRealTimeStatus(browserRealTimeUnsupportedMessage, 'warning');
+        logRealTime('Browser Screen Capture API unavailable.');
+        return;
+      }
+
+      if (!window.Tesseract) {
+        showRealTimeStatus('OCR could not load. Experimental Browser Test Mode needs OCR before it can scan rides.', 'error');
+        logRealTime('Tesseract OCR unavailable.');
+        return;
+      }
+
+      try {
+        showRealTimeStatus('Choose the screen or window that shows Uber Driver.', 'warning');
+        realTimeStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: 2 },
+          audio: false
+        });
+        realTimeVideo = document.createElement('video');
+        realTimeVideo.muted = true;
+        realTimeVideo.playsInline = true;
+        realTimeVideo.srcObject = realTimeStream;
+        await realTimeVideo.play();
+
+        for (const track of realTimeStream.getVideoTracks()) {
+          track.addEventListener('ended', () => stopRealTimeMode('Screen sharing ended. Experimental Browser Test Mode stopped.'));
+        }
+
+        setRealTimeActive(true);
+        showRealTimeStatus('Experimental Browser Test Mode is ready. Tap Scan Ride when a request card appears.', 'success');
+        logRealTime('Experimental Browser Test Mode started. Waiting for manual scan.');
+      } catch (error) {
+        stopRealTimeMode('Screen sharing was not started.');
+      }
+    }
+
+    async function captureRealTimeFrame() {
+      if (!realTimeVideo || !realTimeStream) {
+        showRealTimeStatus('Start Experimental Browser Test Mode before scanning.', 'warning');
+        return;
+      }
+
+      if (realTimeBusy) {
+        return;
+      }
+
+      const width = realTimeVideo.videoWidth;
+      const height = realTimeVideo.videoHeight;
+
+      if (!width || !height) {
+        showRealTimeStatus('Waiting for the shared screen to be ready.', 'warning');
+        logRealTime('Shared screen video was not ready yet.');
+        return;
+      }
+
+      realTimeBusy = true;
+      realTimeCapture.disabled = true;
+      floatingScan.disabled = true;
+      showRealTimeStatus('Scanning current screen for a ride request.', 'warning');
+      logRealTime('Scan started.');
+
+      try {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.width = width;
+        canvas.height = height;
+        context.drawImage(realTimeVideo, 0, 0, width, height);
+
+        const ocrResult = await processRideImage(canvas, showRealTimeStatus);
+        ocrText.textContent = ocrResult.debugText;
+        logRealTime(`Detection: ${ocrResult.rideDetection.detected ? 'ride request found' : 'no request'} (${ocrResult.rideDetection.reason}).`);
+
+        if (!ocrResult.rideDetection.detected) {
+          hideTripOverlay();
+          showRealTimeStatus('No likely ride request card detected. TripIQ is still waiting.', 'warning');
+          return;
+        }
+
+        const missing = describeMissingDetails(ocrResult.details);
+        const needsFareReview = shouldFlagFareForReview(ocrResult.details);
+        applyExtractedDetails(ocrResult.details);
+        setRidePayReviewFlag(needsFareReview);
+
+        if (missing.length || needsFareReview) {
+          hideTripOverlay();
+          const reviewNotes = missing.length ? `Missing: ${missing.join(', ')}` : 'Ride Pay needs review';
+          showRealTimeStatus(`Ride detected, but review is needed before showing a rating. ${reviewNotes}.`, 'warning');
+          logRealTime(`Ride detected but not rated. ${reviewNotes}.`);
+          return;
+        }
+
+        const analysis = calculateTripAnalysis(ocrResult.details);
+        if (isResultVisible()) {
+          renderMainResult(analysis);
+        }
+        showTripOverlay(analysis);
+        showRealTimeStatus('Ride analyzed. Overlay will auto-hide shortly.', 'success');
+        logRealTime(`${analysis.decision}: ${formatMoney(analysis.hourlyRate)}/hr, ${formatMoney(analysis.payPerMile)}/mi, ${formatNumber(analysis.totalTime)} min, ${formatNumber(analysis.totalMiles)} mi.`);
+      } catch (error) {
+        hideTripOverlay();
+        showRealTimeStatus('Real-Time scan failed. Try Scan Ride again or use screenshot upload.', 'error');
+        logRealTime(`Scan failed: ${error.message || error}`);
+      } finally {
+        realTimeBusy = false;
+        realTimeCapture.disabled = false;
+        floatingScan.disabled = false;
       }
     }
 
@@ -1320,6 +1786,15 @@
     });
 
     readScreenshot.addEventListener('click', readScreenshotText);
+    realTimeToggle.addEventListener('click', () => {
+      if (realTimeStream) {
+        stopRealTimeMode();
+      } else {
+        startRealTimeMode();
+      }
+    });
+    realTimeCapture.addEventListener('click', captureRealTimeFrame);
+    floatingScan.addEventListener('click', captureRealTimeFrame);
 
     form.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -1349,6 +1824,7 @@
     });
 
     loadSavedPreferences();
+    initializeRealTimeTestMode();
   </script>
 </body>
 </html>
